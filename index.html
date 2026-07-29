@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Iron Log</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Iron Log">
+<meta name="theme-color" content="#14161a">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2314161a'/%3E%3Crect x='42' y='20' width='16' height='60' rx='3' fill='%23c98a4b'/%3E%3Crect x='20' y='38' width='14' height='24' rx='3' fill='%23ece8e0'/%3E%3Crect x='66' y='38' width='14' height='24' rx='3' fill='%23ece8e0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14161a;
+    --bg-elevated: #1c1f24;
+    --bg-card: #21242a;
+    --hairline: #2e323a;
+    --chalk: #ece8e0;
+    --chalk-dim: #9a9da3;
+    --chalk-mute: #8b8e94;
+    --iron: #5b7c99;
+    --brass: #c98a4b;
+    --brass-bright: #e0a256;
+    --danger: #b5544a;
+    --good: #6f9d7a;
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body{ height: 100%; overscroll-behavior-y: none; }
+  body{
+    margin:0; background: var(--bg); color: var(--chalk);
+    font-family: 'Inter', sans-serif;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+    padding-top: env(safe-area-inset-top);
+    min-height: 100vh;
+  }
+  .display{ font-family:'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
+  .mono{ font-family: 'Roboto Mono', monospace; }
+
+  header.topbar{
+    position: sticky; top:0; z-index: 20;
+    background: linear-gradient(180deg, var(--bg) 85%, transparent);
+    padding: 18px 20px 8px;
+  }
+  header.topbar .brand{ display:flex; align-items:baseline; gap:10px; }
+  header.topbar .brand .mark{
+    width:10px; height:10px; background: var(--brass); border-radius: 1px;
+    transform: rotate(45deg); flex-shrink:0;
+  }
+  header.topbar h1{ font-size: 22px; margin:0; font-weight:600; letter-spacing:0.04em; }
+  header.topbar .sub{ color: var(--chalk-mute); font-size: 12px; margin-top:2px; letter-spacing:0.03em; }
+
+  .tabbar{
+    display:flex; gap:6px; padding: 4px 16px 14px; overflow-x:auto; scrollbar-width:none;
+  }
+  .tabbar::-webkit-scrollbar{ display:none; }
+  .tab-btn{
+    background: var(--bg-card); border:1px solid var(--hairline); color: var(--chalk-mute);
+    font-size: 11px; font-weight:600; padding:7px 13px; border-radius: 16px; cursor:pointer;
+    font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.03em; flex-shrink:0;
+  }
+  .tab-btn.active{ background: var(--chalk); color: var(--bg); border-color: var(--chalk); }
+
+  main{ padding: 0 16px 24px; max-width: 560px; margin: 0 auto; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  /* ---------- Calendar ---------- */
+  .cal-nav{
+    display:flex; justify-content:space-between; align-items:center; margin: 6px 4px 16px;
+  }
+  .cal-nav .cal-month{ font-family:'Oswald'; font-size:17px; text-transform:uppercase; letter-spacing:0.03em; }
+  .cal-nav .cal-arrow{
+    width:34px; height:34px; border-radius:10px; background: var(--bg-card); border:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:center; color: var(--chalk-dim); font-size:16px; cursor:pointer;
+  }
+  .cal-weekdays{ display:grid; grid-template-columns: repeat(7, 1fr); margin-bottom:6px; }
+  .cal-weekdays span{ text-align:center; font-size:10px; color: var(--chalk-mute); text-transform:uppercase; letter-spacing:0.05em; }
+  .cal-grid{ display:grid; grid-template-columns: repeat(7, 1fr); gap:5px; }
+  .cal-cell{
+    aspect-ratio: 1; border-radius: 12px; background: var(--bg-card); border:1px solid var(--hairline);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    position:relative; cursor:pointer; color: var(--chalk-dim); font-size:13px; font-weight:600;
+  }
+  .cal-cell.empty{ background:transparent; border-color:transparent; cursor:default; }
+  .cal-cell.today{ border-color: var(--iron); }
+  .cal-cell.logged{ background: rgba(201,138,75,0.14); border-color: rgba(201,138,75,0.4); }
+  .cal-cell .cal-daynum{ font-size:14px; }
+  .cal-cell .cal-code{
+    font-family:'Roboto Mono'; font-size:8px; color: var(--brass-bright); text-transform:uppercase; letter-spacing:0.03em;
+  }
+  .cal-cell.future{ opacity: 0.55; }
+
+  .cal-legend{
+    display:flex; gap:14px; margin-top:16px; padding: 0 4px; flex-wrap:wrap;
+  }
+  .cal-legend .li{ display:flex; align-items:center; gap:6px; font-size:11px; color: var(--chalk-mute); }
+  .cal-legend .dot{ width:8px; height:8px; border-radius:2px; background: var(--brass); }
+
+  .section-label{
+    font-size:11px; color: var(--chalk-mute); text-transform:uppercase; letter-spacing:0.08em;
+    margin: 20px 4px 10px; font-weight:600;
+  }
+
+  /* ---------- Sheets / Overlays ---------- */
+  .sheet-backdrop{
+    position: fixed; inset:0; background: rgba(0,0,0,0.55); z-index: 50; display:none;
+    align-items:flex-end; justify-content:center;
+  }
+  .sheet-backdrop.show{ display:flex; }
+  .sheet{
+    background: var(--bg-elevated); width:100%; max-width:560px; border-radius: 20px 20px 0 0;
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); max-height: 82vh; overflow-y:auto;
+    border-top: 1px solid var(--hairline);
+  }
+  .sheet-handle{ width:36px; height:4px; background: var(--hairline); border-radius:2px; margin: 0 auto 14px; }
+  .sheet h3{ font-family:'Oswald'; text-transform:uppercase; font-size:16px; margin: 0 0 4px; letter-spacing:0.03em; }
+  .sheet .sheet-sub{ font-size:12px; color: var(--chalk-mute); margin-bottom:16px; }
+
+  .workout-option{
+    background: var(--bg-card); border:1.5px solid var(--hairline); border-radius:14px;
+    padding: 14px 16px; margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;
+  }
+  .workout-option .wo-name{ font-family:'Oswald'; font-size:15px; text-transform:uppercase; letter-spacing:0.02em; }
+  .workout-option .wo-meta{ font-size:11px; color: var(--chalk-mute); margin-top:3px; }
+  .workout-option .wo-badge{
+    font-size:9px; font-weight:700; color: var(--brass-bright); text-transform:uppercase; letter-spacing:0.04em;
+    border:1px solid var(--brass-bright); border-radius:8px; padding: 3px 7px; flex-shrink:0;
+  }
+  .workout-option.recommended{ border-color: var(--brass); background: rgba(201,138,75,0.10); }
+
+  .preset-btn{
+    display:block; width:100%; text-align:left; background: var(--bg-card); border:1px solid var(--hairline);
+    color: var(--chalk); border-radius:12px; padding: 12px 14px; margin-bottom:8px; font-size:14px; cursor:pointer;
+  }
+  .preset-btn.current{ border-color: var(--iron); }
+  .custom-row{ display:flex; gap:8px; margin-top:10px; }
+  .custom-row input{
+    flex:1; background: var(--bg-card); border:1px solid var(--hairline); color: var(--chalk);
+    border-radius:12px; padding: 12px 14px; font-size:14px;
+  }
+  .custom-row button{
+    background: var(--brass); color:#1a1206; border:none; border-radius:12px; padding: 0 18px;
+    font-family:'Oswald'; font-weight:700; text-transform:uppercase; font-size:12px; cursor:pointer;
+  }
+  .sheet-close-btn{
+    margin-top: 14px; width:100%; background:transparent; border:1px solid var(--hairline); color: var(--chalk-mute);
+    border-radius:12px; padding: 12px; font-family:'Oswald'; text-transform:uppercase; font-size:12px; cursor:pointer;
+  }
+
+  /* ---------- Log view ---------- */
+  .log-header{ display:flex; align-items:center; gap:12px; margin: 6px 4px 4px; }
+  .back-arrow{
+    width:36px; height:36px; border-radius:10px; background: var(--bg-card); border:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:center; font-size:17px; color: var(--chalk-dim); cursor:pointer; flex-shrink:0;
+  }
+  .log-header .lh-title{ font-family:'Oswald'; font-size:18px; text-transform:uppercase; letter-spacing:0.02em; }
+  .log-header .lh-date{ font-size:11px; color: var(--chalk-mute); margin-top:1px; }
+
+  .session-meta{ display:flex; justify-content:space-between; align-items:center; margin: 14px 4px 12px; }
+  .session-meta .set-total{ font-size:12px; color: var(--chalk-mute); }
+  .session-meta .set-total b{ color: var(--brass); font-weight:700; }
+
+  .exercise-card{
+    background: var(--bg-card); border:1px solid var(--hairline); border-radius: 14px;
+    padding: 16px 16px 14px; margin-bottom: 12px;
+  }
+  .ex-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 10px; gap:10px; }
+  .ex-name-row{ display:flex; align-items:center; gap:8px; }
+  .ex-name{ font-size: 15px; font-weight:600; letter-spacing:0.01em; }
+  .swap-icon{
+    width:26px; height:26px; border-radius:8px; background: var(--bg-elevated); border:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:center; font-size:12px; color: var(--chalk-mute); cursor:pointer; flex-shrink:0;
+  }
+  .ex-target{ font-size:11px; color: var(--chalk-mute); margin-top:2px; }
+  .ex-refs{ text-align:right; font-size:11px; color: var(--chalk-mute); line-height:1.5; flex-shrink:0; }
+  .ex-refs .prev-val{ color: var(--iron); font-weight:600; font-family:'Roboto Mono'; }
+  .ex-refs .pr-val{ color: var(--brass-bright); font-weight:600; font-family:'Roboto Mono'; }
+
+  .col-labels{ display:grid; grid-template-columns: 22px 1fr 1fr 30px; gap:8px; margin-bottom:2px; }
+  .col-labels span{ font-size:9px; color:#5f636b; text-align:center; text-transform:uppercase; letter-spacing:0.06em; }
+  .set-rows{ display:flex; flex-direction:column; gap:6px; }
+  .set-row{ display:grid; grid-template-columns: 22px 1fr 1fr 30px; gap:8px; align-items:center; }
+  .set-row .set-idx{ color: var(--chalk-mute); font-size:12px; font-family:'Roboto Mono'; text-align:center; }
+  .set-row input{
+    width:100%; background: var(--bg-elevated); border:1px solid var(--hairline); color: var(--chalk);
+    border-radius:9px; padding: 11px 8px; font-size:16px; text-align:center; font-family:'Roboto Mono'; font-weight:600;
+  }
+  .set-row input::placeholder{ color: #555a62; font-weight:400; }
+  .set-row input:focus{ outline:none; border-color: var(--iron); }
+  .set-row .check{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--hairline); background: var(--bg-elevated);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color: var(--chalk-mute); font-size:15px; user-select:none;
+  }
+  .set-row .check.done{ background: var(--good); border-color: var(--good); color:#0d130f; }
+  .set-row.is-pr .check.done{ background: var(--brass); border-color: var(--brass); color:#1a1206; box-shadow: 0 0 10px rgba(224,162,86,0.5); }
+
+  .finish-bar{
+    display:flex; gap:10px; margin-top: 4px; position:sticky; bottom: env(safe-area-inset-bottom); padding: 10px 0 4px;
+    background: linear-gradient(0deg, var(--bg) 60%, transparent);
+  }
+  .finish-bar button{
+    flex:1; border:none; border-radius: 12px; padding: 13px; font-size:14px; font-weight:700;
+    font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer;
+  }
+  .btn-primary{ background: var(--brass); color: #1a1206; }
+  .btn-secondary{ background: transparent; color: var(--chalk-mute); border:1px solid var(--hairline) !important; }
+  .btn-danger-outline{ background: transparent; color: var(--danger); border:1px solid var(--danger) !important; }
+
+  /* ---------- History ---------- */
+  .history-item{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:12px; padding: 14px 16px; margin-bottom: 10px; }
+  .history-item .h-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+  .history-item .h-day{ font-family:'Oswald'; text-transform:uppercase; font-size:14px; font-weight:600; }
+  .history-item .h-date{ font-size:11px; color:var(--chalk-mute); }
+  .history-item .h-ex{ font-size:12px; color: var(--chalk-dim); padding: 3px 0; display:flex; justify-content:space-between; gap:10px; }
+  .history-item .h-ex .h-sets{ font-family:'Roboto Mono'; color:var(--chalk); text-align:right; }
+  .history-item .h-actions{ margin-top:10px; display:flex; justify-content:flex-end; gap:16px; }
+  .history-item .h-link{ font-size:11px; cursor:pointer; }
+  .history-item .h-edit{ color: var(--iron); }
+  .history-item .h-del{ color: var(--danger); }
+
+  .empty-state{ text-align:center; padding: 50px 20px; color: var(--chalk-mute); }
+  .empty-state .mark-big{ width:24px;height:24px;background:var(--hairline);margin:0 auto 16px;transform:rotate(45deg);border-radius:2px; }
+  .empty-state p{ font-size:13px; line-height:1.6; max-width:280px; margin: 0 auto; }
+
+  /* ---------- PRs ---------- */
+  .pr-item{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:12px; padding: 14px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+  .pr-item .pr-name{ font-size:14px; font-weight:600; }
+  .pr-item .pr-sub{ font-size:11px; color:var(--chalk-mute); margin-top:2px; }
+  .pr-item .pr-weight{ font-family:'Roboto Mono'; font-size:20px; font-weight:700; color: var(--brass-bright); text-align:right; }
+  .pr-item .pr-weight span{ font-size:11px; color:var(--chalk-mute); display:block; font-weight:400; margin-top:1px; }
+
+  /* ---------- Data tab ---------- */
+  .data-card{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:14px; padding: 18px 16px; margin-bottom:14px; }
+  .data-card h4{ margin:0 0 6px; font-family:'Oswald'; text-transform:uppercase; font-size:14px; letter-spacing:0.03em; }
+  .data-card p{ margin:0 0 14px; font-size:12.5px; color: var(--chalk-mute); line-height:1.6; }
+  .data-btn{
+    display:block; width:100%; background: var(--brass); color:#1a1206; border:none; border-radius:12px;
+    padding: 13px; font-family:'Oswald'; text-transform:uppercase; font-weight:700; font-size:13px; cursor:pointer; text-align:center;
+  }
+  .data-btn.secondary{ background: var(--bg-elevated); color: var(--chalk); border:1px solid var(--hairline); }
+  .data-status{ font-size:11.5px; color: var(--good); margin-top:10px; font-family:'Roboto Mono'; }
+  input[type=file]{ display:none; }
+
+  .toast{
+    position: fixed; top: 14px; left:50%; transform: translateX(-50%) translateY(-60px);
+    background: var(--brass); color:#1a1206; padding: 10px 18px; border-radius: 20px; font-size:13px; font-weight:600;
+    z-index:100; transition: transform .25s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 88%; text-align:center;
+  }
+  .toast.show{ transform: translateX(-50%) translateY(0); }
+  ::-webkit-scrollbar{ width:0; height:0; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><div class="mark"></div><h1>Iron Log</h1></div>
+  <div class="sub" id="headerSub">Upper / Lower &middot; 4-day split</div>
+</header>
+
+<div class="tabbar">
+  <div class="tab-btn active" data-tab="calendar">Calendar</div>
+  <div class="tab-btn" data-tab="history">History</div>
+  <div class="tab-btn" data-tab="prs">PRs</div>
+  <div class="tab-btn" data-tab="data">Data</div>
+</div>
+
+<main>
+
+  <!-- CALENDAR VIEW -->
+  <div class="view active" id="view-calendar">
+    <div class="cal-nav">
+      <div class="cal-arrow" id="prevMonth">‹</div>
+      <div class="cal-month" id="calMonthLabel"></div>
+      <div class="cal-arrow" id="nextMonth">›</div>
+    </div>
+    <div class="cal-weekdays"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-legend">
+      <div class="li"><span class="dot"></span> Logged workout</div>
+      <div class="li">Tap any day to log or review</div>
+    </div>
+  </div>
+
+  <!-- LOG VIEW -->
+  <div class="view" id="view-log">
+    <div class="log-header">
+      <div class="back-arrow" id="backToCalendar">‹</div>
+      <div>
+        <div class="lh-title" id="logTitle">Upper A</div>
+        <div class="lh-date" id="logDate"></div>
+      </div>
+    </div>
+    <div class="session-meta">
+      <div class="set-total">Working sets: <b id="setCount">0</b>/<span id="setCountTotal">17</span></div>
+    </div>
+    <div id="exerciseList"></div>
+    <div class="finish-bar">
+      <button class="btn-secondary" id="clearBtn">Clear</button>
+      <button class="btn-primary" id="finishBtn">Finish &amp; Save</button>
+    </div>
+  </div>
+
+  <!-- HISTORY VIEW -->
+  <div class="view" id="view-history"><div id="historyList"></div></div>
+
+  <!-- PR VIEW -->
+  <div class="view" id="view-prs"><div id="prList"></div></div>
+
+  <!-- DATA VIEW -->
+  <div class="view" id="view-data">
+    <div class="data-card">
+      <h4>Auto-Save</h4>
+      <p>Your workouts, PRs, and exercise swaps save automatically to this browser as you go — no action needed. This only persists on this device and browser, though, so use the backup below if you switch phones or clear browser data.</p>
+    </div>
+    <div class="data-card">
+      <h4>Backup to File</h4>
+      <p>Downloads everything as a JSON file — useful before clearing browser data, switching devices, or just for safekeeping.</p>
+      <button class="data-btn" id="saveFileBtn">Download Backup</button>
+      <div class="data-status" id="saveStatus"></div>
+    </div>
+    <div class="data-card">
+      <h4>Restore from File</h4>
+      <p>Loads a previously saved backup. This replaces whatever is currently in the app.</p>
+      <button class="data-btn secondary" id="loadFileBtn">Load Backup</button>
+      <input type="file" id="fileInput" accept="application/json">
+      <div class="data-status" id="loadStatus"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Workout picker sheet -->
+<div class="sheet-backdrop" id="pickerBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="pickerDateLabel">Choose Workout</h3>
+    <div class="sheet-sub">The highlighted option is next in your rotation.</div>
+    <div id="pickerOptions"></div>
+    <button class="sheet-close-btn" id="pickerCancel">Cancel</button>
+  </div>
+</div>
+
+<!-- Swap exercise sheet -->
+<div class="sheet-backdrop" id="swapBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Swap Exercise</h3>
+    <div class="sheet-sub" id="swapSubLabel"></div>
+    <div id="swapPresets"></div>
+    <div class="custom-row">
+      <input type="text" id="swapCustomInput" placeholder="Type a custom exercise...">
+      <button id="swapCustomBtn">Use</button>
+    </div>
+    <button class="sheet-close-btn" id="swapCancel">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============ Program Definition ============
+const PROGRAM_DEFAULT = {
+  upperA: { label:'Upper A', short:'UP A', exercises:[
+    {name:'Barbell Bench Press', target:'4 x 6-8', category:'chest'},
+    {name:'Barbell Row', target:'4 x 6-8', category:'back'},
+    {name:'Seated DB Shoulder Press', target:'3 x 8-10', category:'shoulders'},
+    {name:'Lat Pulldown', target:'2 x 10-12', category:'back-width'},
+    {name:'Lateral Raise', target:'2 x 12-15', category:'side-delt'},
+    {name:'EZ-Bar Curl', target:'2 x 10-12', category:'biceps'},
+  ]},
+  lowerA: { label:'Lower A', short:'LOW A', exercises:[
+    {name:'Back Squat', target:'4 x 6-8', category:'quads'},
+    {name:'Romanian Deadlift', target:'3 x 8-10', category:'hamstrings'},
+    {name:'Leg Press', target:'3 x 10-12', category:'quads'},
+    {name:'Leg Curl', target:'2 x 10-12', category:'hamstrings'},
+    {name:'Standing Calf Raise', target:'3 x 12-15', category:'calves'},
+    {name:'Hanging Knee Raise', target:'2 x 12-15', category:'core'},
+  ]},
+  upperB: { label:'Upper B', short:'UP B', exercises:[
+    {name:'Incline DB Press', target:'4 x 8-10', category:'chest'},
+    {name:'Seated Cable Row', target:'4 x 8-10', category:'back'},
+    {name:'Cable Face Pull', target:'2 x 12-15', category:'rear-delt'},
+    {name:'Overhead Tricep Extension', target:'3 x 10-12', category:'triceps'},
+    {name:'Hammer Curl', target:'2 x 10-12', category:'biceps'},
+    {name:'Rear Delt Fly', target:'2 x 12-15', category:'rear-delt'},
+  ]},
+  lowerB: { label:'Lower B', short:'LOW B', exercises:[
+    {name:'Conventional Deadlift', target:'3 x 5', category:'posterior-chain'},
+    {name:'Front Squat', target:'3 x 8-10', category:'quads'},
+    {name:'Walking Lunge', target:'3 x 10/leg', category:'quads-glutes'},
+    {name:'Leg Extension', target:'2 x 12-15', category:'quads'},
+    {name:'Seated Calf Raise', target:'3 x 15-20', category:'calves'},
+    {name:'Weighted Plank', target:'3 x 30-45s', category:'core'},
+  ]},
+};
+const DAY_ORDER = ['upperA','lowerA','upperB','lowerB'];
+
+const PRESETS = {
+  'chest': ['Incline DB Press', 'Flat DB Press', 'Machine Chest Press', 'Weighted Dip', 'Barbell Bench Press'],
+  'back': ['Chest-Supported Row', 'T-Bar Row', 'Seated Cable Row', 'Single-Arm DB Row', 'Barbell Row'],
+  'shoulders': ['Overhead Barbell Press', 'Machine Shoulder Press', 'Arnold Press', 'Seated DB Shoulder Press'],
+  'back-width': ['Pull-Up', 'Assisted Pull-Up', 'Straight-Arm Pulldown', 'Lat Pulldown'],
+  'side-delt': ['Cable Lateral Raise', 'Machine Lateral Raise', 'Upright Row', 'Lateral Raise'],
+  'biceps': ['DB Curl', 'Cable Curl', 'Preacher Curl', 'Hammer Curl', 'EZ-Bar Curl'],
+  'quads': ['Front Squat', 'Hack Squat', 'Leg Press', 'Goblet Squat', 'Back Squat', 'Leg Extension'],
+  'hamstrings': ['Stiff-Leg Deadlift', 'Good Morning', 'Cable Pull-Through', 'Leg Curl', 'Romanian Deadlift'],
+  'calves': ['Seated Calf Raise', 'Leg Press Calf Raise', 'Donkey Calf Raise', 'Standing Calf Raise'],
+  'core': ['Cable Crunch', 'Ab Wheel Rollout', 'Weighted Sit-Up', 'Hanging Knee Raise', 'Weighted Plank'],
+  'rear-delt': ['Reverse Pec Deck', 'Band Pull-Apart', 'Rear Delt Fly', 'Cable Face Pull'],
+  'triceps': ['Tricep Pushdown', 'Skull Crusher', 'Close-Grip Bench Press', 'Overhead Tricep Extension'],
+  'posterior-chain': ['Trap Bar Deadlift', 'Sumo Deadlift', 'Rack Pull', 'Conventional Deadlift'],
+  'quads-glutes': ['Bulgarian Split Squat', 'Reverse Lunge', 'Step-Up', 'Walking Lunge'],
+};
+
+// ============ App State ============
+let state = {
+  customProgram: {},   // { dayKey: { slotIndex: {name, target, category} } }
+  sessions: []          // { id, date:'YYYY-MM-DD', dayKey, dayLabel, exercises:[{name,sets:[{weight,reps}]}] }
+};
+
+const STORAGE_KEY = 'ironlog:data';
+
+function saveToLocalStorage(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ customProgram: state.customProgram, sessions: state.sessions }));
+  }catch(e){
+    console.error('localStorage save failed', e);
+  }
+}
+
+function loadFromLocalStorage(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return false;
+    const parsed = JSON.parse(raw);
+    state.customProgram = parsed.customProgram || {};
+    state.sessions = parsed.sessions || [];
+    return true;
+  }catch(e){
+    console.error('localStorage load failed', e);
+    return false;
+  }
+}
+
+let viewYear, viewMonth; // calendar nav
+let activeDate = null;   // 'YYYY-MM-DD' currently open in log view
+let activeDayKey = null;
+let sessionData = {};    // in-progress edits for activeDate
+let editingSessionId = null;
+let swapContext = null;  // {dayKey, slotIndex}
+
+const $ = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function pad2(n){ return n.toString().padStart(2,'0'); }
+function fmtDate(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+function todayStr(){ return fmtDate(new Date()); }
+
+function getEffectiveDay(dayKey){
+  const base = PROGRAM_DEFAULT[dayKey];
+  const overrides = state.customProgram[dayKey] || {};
+  const exercises = base.exercises.map((ex, idx) => overrides[idx] ? {...ex, ...overrides[idx]} : ex);
+  return { label: base.label, short: base.short, exercises };
+}
+
+function totalSetsFor(day){ return day.exercises.reduce((sum, ex) => sum + parseInt(ex.target), 0); }
+
+function findSessionByDate(dateStr){ return state.sessions.find(s => s.date === dateStr); }
+
+// ============ Calendar rendering ============
+function renderCalendar(){
+  $('#calMonthLabel').textContent = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  const grid = $('#calGrid');
+  grid.innerHTML = '';
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  const today = todayStr();
+
+  for(let i=0; i<firstDay; i++){
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell empty';
+    grid.appendChild(cell);
+  }
+  for(let d=1; d<=daysInMonth; d++){
+    const dateObj = new Date(viewYear, viewMonth, d);
+    const dateStr = fmtDate(dateObj);
+    const session = findSessionByDate(dateStr);
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell';
+    if(dateStr === today) cell.classList.add('today');
+    if(session) cell.classList.add('logged');
+    if(dateStr > today) cell.classList.add('future');
+    cell.innerHTML = `<div class="cal-daynum">${d}</div>${session ? `<div class="cal-code">${PROGRAM_DEFAULT[session.dayKey].short}</div>` : ''}`;
+    cell.addEventListener('click', () => onDateTapped(dateStr));
+    grid.appendChild(cell);
+  }
+}
+
+function changeMonth(delta){
+  viewMonth += delta;
+  if(viewMonth < 0){ viewMonth = 11; viewYear--; }
+  if(viewMonth > 11){ viewMonth = 0; viewYear++; }
+  renderCalendar();
+}
+
+// ============ Recommendation logic ============
+function getRecommendedDayKey(){
+  if(!state.sessions.length) return DAY_ORDER[0];
+  const sorted = [...state.sessions].sort((a,b) => a.date.localeCompare(b.date));
+  const last = sorted[sorted.length - 1];
+  const idx = DAY_ORDER.indexOf(last.dayKey);
+  return DAY_ORDER[(idx + 1) % DAY_ORDER.length];
+}
+
+// ============ Date tap -> picker or edit ============
+function onDateTapped(dateStr){
+  const existing = findSessionByDate(dateStr);
+  if(existing){
+    openLogView(dateStr, existing.dayKey, existing);
+  }else{
+    openPickerSheet(dateStr);
+  }
+}
+
+function openPickerSheet(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  $('#pickerDateLabel').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  const recommended = getRecommendedDayKey();
+  const container = $('#pickerOptions');
+  container.innerHTML = '';
+  DAY_ORDER.forEach(dayKey => {
+    const day = getEffectiveDay(dayKey);
+    const opt = document.createElement('div');
+    opt.className = 'workout-option' + (dayKey === recommended ? ' recommended' : '');
+    opt.innerHTML = `
+      <div>
+        <div class="wo-name">${day.label}</div>
+        <div class="wo-meta">${totalSetsFor(day)} working sets &middot; ${day.exercises.length} exercises</div>
+      </div>
+      ${dayKey === recommended ? '<div class="wo-badge">Next Up</div>' : ''}
+    `;
+    opt.addEventListener('click', () => {
+      closeSheet('pickerBackdrop');
+      openLogView(dateStr, dayKey, null);
+    });
+    container.appendChild(opt);
+  });
+  openSheet('pickerBackdrop');
+}
+
+// ============ Log view ============
+function openLogView(dateStr, dayKey, existingSession){
+  activeDate = dateStr;
+  activeDayKey = dayKey;
+  editingSessionId = existingSession ? existingSession.id : null;
+  const day = getEffectiveDay(dayKey);
+
+  sessionData = {};
+  day.exercises.forEach((ex, idx) => {
+    const setCount = parseInt(ex.target);
+    let preset = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
+    if(existingSession){
+      const match = existingSession.exercises.find(e => e.name === ex.name);
+      if(match){
+        preset = match.sets.map(s => ({weight: s.weight ?? '', reps: s.reps ?? '', done: true}));
+        while(preset.length < setCount) preset.push({weight:'', reps:'', done:false});
+      }
+    }
+    sessionData[idx] = preset;
+  });
+
+  const d = new Date(dateStr + 'T00:00:00');
+  $('#logTitle').textContent = day.label;
+  $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  renderExercises();
+  switchView('log');
+}
+
+function renderExercises(){
+  const day = getEffectiveDay(activeDayKey);
+  $('#setCountTotal').textContent = totalSetsFor(day);
+  const list = $('#exerciseList');
+  list.innerHTML = '';
+
+  day.exercises.forEach((ex, slotIdx) => {
+    const prev = getPreviousSets(ex.name, activeDate);
+    const pr = getPR(ex.name);
+    const prevText = formatPrevText(prev);
+    const prText = pr ? `${pr.weight} x ${pr.reps}` : '—';
+
+    const card = document.createElement('div');
+    card.className = 'exercise-card';
+    card.innerHTML = `
+      <div class="ex-head">
+        <div>
+          <div class="ex-name-row">
+            <span class="ex-name">${ex.name}</span>
+            <div class="swap-icon" data-slot="${slotIdx}">⇄</div>
+          </div>
+          <div class="ex-target">${ex.target}</div>
+        </div>
+        <div class="ex-refs">
+          <div>Last: <span class="prev-val">${prevText}</span></div>
+          <div>PR: <span class="pr-val">${prText}</span></div>
+        </div>
+      </div>
+      <div class="col-labels"><span></span><span>Weight (lb)</span><span>Reps</span><span>✓</span></div>
+      <div class="set-rows" data-slot="${slotIdx}"></div>
+    `;
+
+    $('.swap-icon', card).addEventListener('click', () => openSwapSheet(slotIdx));
+
+    const rows = $('.set-rows', card);
+    sessionData[slotIdx].forEach((set, idx) => {
+      const row = document.createElement('div');
+      row.className = 'set-row';
+      const prevSet = prev && prev.sets[idx] ? prev.sets[idx] : null;
+      row.innerHTML = `
+        <div class="set-idx">${idx+1}</div>
+        <input type="number" inputmode="decimal" placeholder="${prevSet && prevSet.weight != null ? prevSet.weight : '—'}" value="${set.weight}" data-field="weight">
+        <input type="number" inputmode="numeric" placeholder="${prevSet && prevSet.reps != null ? prevSet.reps : '—'}" value="${set.reps}" data-field="reps">
+        <div class="check ${set.done ? 'done' : ''}">${set.done ? '✓' : ''}</div>
+      `;
+      if(set.done && set.weight && pr && set.weight >= pr.weight) row.classList.add('is-pr');
+
+      $('input[data-field="weight"]', row).addEventListener('input', e => {
+        sessionData[slotIdx][idx].weight = e.target.value === '' ? '' : parseFloat(e.target.value);
+      });
+      $('input[data-field="reps"]', row).addEventListener('input', e => {
+        sessionData[slotIdx][idx].reps = e.target.value === '' ? '' : parseInt(e.target.value);
+      });
+      const checkBtn = $('.check', row);
+      checkBtn.addEventListener('click', () => {
+        const s = sessionData[slotIdx][idx];
+        s.done = !s.done;
+        checkBtn.classList.toggle('done', s.done);
+        checkBtn.textContent = s.done ? '✓' : '';
+        row.classList.toggle('is-pr', s.done && s.weight && pr && s.weight >= pr.weight);
+        updateSetCounter();
+      });
+      rows.appendChild(row);
+    });
+    list.appendChild(card);
+  });
+  updateSetCounter();
+}
+
+function updateSetCounter(){
+  let done = 0;
+  Object.values(sessionData).forEach(sets => sets.forEach(s => { if(s.done) done++; }));
+  $('#setCount').textContent = done;
+}
+
+// ============ Swap exercise ============
+function openSwapSheet(slotIdx){
+  swapContext = { slotIdx };
+  const day = getEffectiveDay(activeDayKey);
+  const ex = day.exercises[slotIdx];
+  $('#swapSubLabel').textContent = `Currently: ${ex.name}`;
+  const presets = PRESETS[ex.category] || [];
+  const container = $('#swapPresets');
+  container.innerHTML = '';
+  presets.forEach(name => {
+    const btn = document.createElement('div');
+    btn.className = 'preset-btn' + (name === ex.name ? ' current' : '');
+    btn.textContent = name;
+    btn.addEventListener('click', () => applySwap(slotIdx, name, ex.target, ex.category));
+    container.appendChild(btn);
+  });
+  $('#swapCustomInput').value = '';
+  openSheet('swapBackdrop');
+}
+
+function applySwap(slotIdx, name, target, category){
+  if(!state.customProgram[activeDayKey]) state.customProgram[activeDayKey] = {};
+  state.customProgram[activeDayKey][slotIdx] = { name, target, category };
+  saveToLocalStorage();
+  closeSheet('swapBackdrop');
+  // reset that slot's sets since it's now a different exercise
+  const setCount = parseInt(target);
+  sessionData[slotIdx] = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
+  renderExercises();
+  showToast(`Swapped to ${name}`);
+}
+
+$('#swapCustomBtn').addEventListener('click', () => {
+  const val = $('#swapCustomInput').value.trim();
+  if(!val) return;
+  const day = getEffectiveDay(activeDayKey);
+  const ex = day.exercises[swapContext.slotIdx];
+  applySwap(swapContext.slotIdx, val, ex.target, ex.category);
+});
+
+// ============ Previous / PR lookups ============
+function getPreviousSets(exerciseName, beforeDate){
+  const sorted = [...state.sessions]
+    .filter(s => !beforeDate || s.date < beforeDate || (s.date === beforeDate && s.id !== editingSessionId))
+    .sort((a,b) => a.date.localeCompare(b.date));
+  for(let i = sorted.length - 1; i >= 0; i--){
+    const ex = sorted[i].exercises.find(e => e.name === exerciseName);
+    if(ex && ex.sets && ex.sets.length) return { date: sorted[i].date, sets: ex.sets };
+  }
+  return null;
+}
+
+function getPR(exerciseName){
+  let best = null;
+  state.sessions.forEach(s => {
+    const ex = s.exercises.find(e => e.name === exerciseName);
+    if(!ex) return;
+    ex.sets.forEach(set => {
+      if(set.weight == null || set.weight === '') return;
+      if(!best || set.weight > best.weight || (set.weight === best.weight && (set.reps||0) > (best.reps||0))){
+        best = { weight: set.weight, reps: set.reps, date: s.date };
+      }
+    });
+  });
+  return best;
+}
+
+function formatPrevText(prev){
+  if(!prev) return 'no data yet';
+  const parts = prev.sets.filter(s => s.weight != null && s.weight !== '').map(s => `${s.weight}x${s.reps ?? '-'}`);
+  return parts.length ? parts.join(', ') : 'no data yet';
+}
+
+// ============ Finish / Save / Clear ============
+function finishSession(){
+  const day = getEffectiveDay(activeDayKey);
+  const exercisesOut = [];
+  let anyLogged = false;
+
+  day.exercises.forEach((ex, slotIdx) => {
+    const loggedSets = sessionData[slotIdx]
+      .filter(s => s.weight !== '' && s.weight != null)
+      .map(s => ({ weight: s.weight, reps: s.reps === '' ? null : s.reps }));
+    if(loggedSets.length){
+      anyLogged = true;
+      exercisesOut.push({ name: ex.name, sets: loggedSets });
+    }
+  });
+
+  if(!anyLogged){ showToast('Log at least one set first'); return; }
+
+  const sessionObj = {
+    id: editingSessionId || Date.now().toString(),
+    date: activeDate,
+    dayKey: activeDayKey,
+    dayLabel: day.label,
+    exercises: exercisesOut
+  };
+
+  if(editingSessionId){
+    const idx = state.sessions.findIndex(s => s.id === editingSessionId);
+    state.sessions[idx] = sessionObj;
+  }else{
+    state.sessions.push(sessionObj);
+  }
+
+  saveToLocalStorage();
+  showToast('Workout saved');
+  renderCalendar();
+  renderHistory();
+  renderPRs();
+  switchView('calendar');
+}
+
+function clearLogEntries(){
+  const day = getEffectiveDay(activeDayKey);
+  day.exercises.forEach((ex, slotIdx) => {
+    const setCount = parseInt(ex.target);
+    sessionData[slotIdx] = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
+  });
+  renderExercises();
+}
+
+// ============ History ============
+function renderHistory(){
+  const container = $('#historyList');
+  container.innerHTML = '';
+  if(!state.sessions.length){
+    container.innerHTML = `<div class="empty-state"><div class="mark-big"></div><p>No sessions logged yet. Tap a day on the Calendar tab to get started.</p></div>`;
+    return;
+  }
+  const sorted = [...state.sessions].sort((a,b) => b.date.localeCompare(a.date));
+  sorted.forEach(session => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    const d = new Date(session.date + 'T00:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    let exRows = '';
+    session.exercises.forEach(ex => {
+      const setsStr = ex.sets.map(s => `${s.weight}${s.reps != null ? 'x'+s.reps : ''}`).join(', ');
+      exRows += `<div class="h-ex"><span>${ex.name}</span><span class="h-sets">${setsStr}</span></div>`;
+    });
+    item.innerHTML = `
+      <div class="h-top"><span class="h-day display">${session.dayLabel}</span><span class="h-date">${dateStr}</span></div>
+      ${exRows}
+      <div class="h-actions"><span class="h-link h-edit">Edit</span><span class="h-link h-del">Delete</span></div>
+    `;
+    $('.h-edit', item).addEventListener('click', () => openLogView(session.date, session.dayKey, session));
+    $('.h-del', item).addEventListener('click', () => {
+      state.sessions = state.sessions.filter(s => s.id !== session.id);
+      saveToLocalStorage();
+      renderHistory(); renderPRs(); renderCalendar();
+    });
+    container.appendChild(item);
+  });
+}
+
+// ============ PRs ============
+function renderPRs(){
+  const container = $('#prList');
+  container.innerHTML = '';
+  const names = new Set();
+  Object.keys(PROGRAM_DEFAULT).forEach(dayKey => getEffectiveDay(dayKey).exercises.forEach(ex => names.add(ex.name)));
+  state.sessions.forEach(s => s.exercises.forEach(ex => names.add(ex.name)));
+
+  let any = false;
+  [...names].forEach(name => {
+    const pr = getPR(name);
+    if(!pr) return;
+    any = true;
+    const item = document.createElement('div');
+    item.className = 'pr-item';
+    const d = new Date(pr.date + 'T00:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    item.innerHTML = `
+      <div><div class="pr-name">${name}</div><div class="pr-sub">${dateStr}</div></div>
+      <div class="pr-weight">${pr.weight}<span>x${pr.reps ?? '-'} reps</span></div>
+    `;
+    container.appendChild(item);
+  });
+  if(!any) container.innerHTML = `<div class="empty-state"><div class="mark-big"></div><p>No PRs recorded yet. Your heaviest logged set for each lift will show up here.</p></div>`;
+}
+
+// ============ Sheets ============
+function openSheet(id){ $('#'+id).classList.add('show'); }
+function closeSheet(id){ $('#'+id).classList.remove('show'); }
+
+// ============ Tabs / navigation ============
+function switchView(name){
+  $$('.view').forEach(v => v.classList.remove('active'));
+  $(`#view-${name}`).classList.add('active');
+  $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  const tabbar = $('.tabbar');
+  tabbar.style.display = name === 'log' ? 'none' : 'flex';
+}
+function switchTab(tab){
+  switchView(tab);
+  if(tab === 'history') renderHistory();
+  if(tab === 'prs') renderPRs();
+}
+
+// ============ File Save / Load ============
+function exportData(){
+  const payload = { version: 1, exportedAt: new Date().toISOString(), customProgram: state.customProgram, sessions: state.sessions };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'iron-log-data.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  $('#saveStatus').textContent = `Saved at ${new Date().toLocaleTimeString()}`;
+  showToast('File download started');
+}
+
+function importData(file){
+  const reader = new FileReader();
+  reader.onload = e => {
+    try{
+      const parsed = JSON.parse(e.target.result);
+      state.customProgram = parsed.customProgram || {};
+      state.sessions = parsed.sessions || [];
+      saveToLocalStorage();
+      $('#loadStatus').textContent = `Loaded ${state.sessions.length} session(s)`;
+      renderCalendar(); renderHistory(); renderPRs();
+      showToast('Data loaded');
+    }catch(err){
+      $('#loadStatus').textContent = 'Could not read that file — is it a valid Iron Log export?';
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ============ Toast ============
+let toastTimer;
+function showToast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ============ Init ============
+function init(){
+  const now = new Date();
+  viewYear = now.getFullYear();
+  viewMonth = now.getMonth();
+
+  loadFromLocalStorage();
+  renderCalendar();
+  renderHistory();
+  renderPRs();
+
+  $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  $('#prevMonth').addEventListener('click', () => changeMonth(-1));
+  $('#nextMonth').addEventListener('click', () => changeMonth(1));
+  $('#backToCalendar').addEventListener('click', () => { switchView('calendar'); renderCalendar(); });
+  $('#finishBtn').addEventListener('click', finishSession);
+  $('#clearBtn').addEventListener('click', clearLogEntries);
+  $('#pickerCancel').addEventListener('click', () => closeSheet('pickerBackdrop'));
+  $('#swapCancel').addEventListener('click', () => closeSheet('swapBackdrop'));
+  $('#pickerBackdrop').addEventListener('click', e => { if(e.target.id === 'pickerBackdrop') closeSheet('pickerBackdrop'); });
+  $('#swapBackdrop').addEventListener('click', e => { if(e.target.id === 'swapBackdrop') closeSheet('swapBackdrop'); });
+
+  $('#saveFileBtn').addEventListener('click', exportData);
+  $('#loadFileBtn').addEventListener('click', () => $('#fileInput').click());
+  $('#fileInput').addEventListener('change', e => {
+    if(e.target.files && e.target.files[0]) importData(e.target.files[0]);
+  });
+}
+
+init();
+</script>
+</body>
+</html>
