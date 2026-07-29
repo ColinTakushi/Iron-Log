@@ -2,8 +2,6 @@
 
 A single-file, zero-dependency workout tracker built for a 4-day upper/lower hypertrophy split. No build step, no backend, no database — just a static page that runs entirely in the browser.
 
-**[Live demo →](#)** *(replace with your GitHub Pages URL after deploying)*
-
 ## Why
 
 Most workout trackers are either bloated subscription apps or spreadsheets that don't scale. This is neither: it's a purpose-built tool for one specific training program, with the two features that actually matter mid-set — *what did I lift last time* and *is this a PR* — surfaced without any taps.
