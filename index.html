@@ -151,7 +151,14 @@
   }
 
   /* ---------- Log view ---------- */
-  .log-header{ display:flex; align-items:center; gap:12px; margin: 6px 4px 4px; }
+  .sticky-log-header{
+    position: sticky; top:0; z-index: 15;
+    background: var(--bg);
+    margin: 0 -16px; padding: 18px 16px 12px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .log-header{ display:flex; align-items:center; gap:12px; }
+  .log-header .lh-timer{ margin-left:auto; font-family:'Roboto Mono'; font-size:20px; font-weight:600; color: var(--brass-bright); }
   .back-arrow{
     width:36px; height:36px; border-radius:10px; background: var(--bg-card); border:1px solid var(--hairline);
     display:flex; align-items:center; justify-content:center; font-size:17px; color: var(--chalk-dim); cursor:pointer; flex-shrink:0;
@@ -162,6 +169,11 @@
   .session-meta{ display:flex; justify-content:space-between; align-items:center; margin: 14px 4px 12px; }
   .session-meta .set-total{ font-size:12px; color: var(--chalk-mute); }
   .session-meta .set-total b{ color: var(--brass); font-weight:700; }
+
+  .progress-wrap{ display:flex; align-items:center; gap:10px; margin: 12px 0 0; }
+  .progress-track{ flex:1; height:8px; background: var(--bg-card); border:1px solid var(--hairline); border-radius:6px; overflow:hidden; }
+  .progress-fill{ height:100%; width:0%; background: linear-gradient(90deg, var(--iron), var(--brass-bright)); border-radius:6px; transition: width .3s ease; }
+  .progress-label{ font-family:'Roboto Mono'; font-size:12px; font-weight:600; color: var(--brass-bright); min-width:38px; text-align:right; }
 
   .exercise-card{
     background: var(--bg-card); border:1px solid var(--hairline); border-radius: 14px;
@@ -175,6 +187,7 @@
     display:flex; align-items:center; justify-content:center; font-size:12px; color: var(--chalk-mute); cursor:pointer; flex-shrink:0;
   }
   .ex-target{ font-size:11px; color: var(--chalk-mute); margin-top:2px; }
+  .ex-intensity{ color: var(--iron); font-weight:600; }
   .ex-refs{ text-align:right; font-size:11px; color: var(--chalk-mute); line-height:1.5; flex-shrink:0; }
   .ex-refs .prev-val{ color: var(--iron); font-weight:600; font-family:'Roboto Mono'; }
   .ex-refs .pr-val{ color: var(--brass-bright); font-weight:600; font-family:'Roboto Mono'; }
@@ -198,12 +211,16 @@
   .set-row.is-pr .check.done{ background: var(--brass); border-color: var(--brass); color:#1a1206; box-shadow: 0 0 10px rgba(224,162,86,0.5); }
 
   .finish-bar{
-    display:flex; gap:10px; margin-top: 4px; position:sticky; bottom: env(safe-area-inset-bottom); padding: 10px 0 4px;
-    background: linear-gradient(0deg, var(--bg) 60%, transparent);
+    display:flex; gap:10px;
+    position: fixed; left:0; right:0; bottom:0; z-index: 25;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--hairline);
   }
   .finish-bar button{
-    flex:1; border:none; border-radius: 12px; padding: 13px; font-size:14px; font-weight:700;
-    font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.04em; cursor:pointer;
+    flex:1; border:none; border-radius: 12px; padding: 13px 8px; font-size:13px; font-weight:700;
+    font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.03em; cursor:pointer;
+    white-space: nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .btn-primary{ background: var(--brass); color: #1a1206; }
   .btn-secondary{ background: transparent; color: var(--chalk-mute); border:1px solid var(--hairline) !important; }
@@ -221,6 +238,7 @@
   .history-item .h-edit{ color: var(--iron); }
   .history-item .h-del{ color: var(--danger); }
 
+  #view-log{ padding-bottom: 90px; }
   .empty-state{ text-align:center; padding: 50px 20px; color: var(--chalk-mute); }
   .empty-state .mark-big{ width:24px;height:24px;background:var(--hairline);margin:0 auto 16px;transform:rotate(45deg);border-radius:2px; }
   .empty-state p{ font-size:13px; line-height:1.6; max-width:280px; margin: 0 auto; }
@@ -255,7 +273,7 @@
 </head>
 <body>
 
-<header class="topbar">
+<header class="topbar" id="topHeader">
   <div class="brand"><div class="mark"></div><h1>Iron Log</h1></div>
   <div class="sub" id="headerSub">Upper / Lower &middot; 4-day split</div>
 </header>
@@ -286,17 +304,21 @@
 
   <!-- LOG VIEW -->
   <div class="view" id="view-log">
-    <div class="log-header">
-      <div class="back-arrow" id="backToCalendar">‹</div>
-      <div>
-        <div class="lh-title" id="logTitle">Upper A</div>
-        <div class="lh-date" id="logDate"></div>
+    <div class="sticky-log-header">
+      <div class="log-header">
+        <div class="back-arrow" id="backToCalendar">‹</div>
+        <div>
+          <div class="lh-title" id="logTitle">Upper A</div>
+          <div class="lh-date" id="logDate"></div>
+        </div>
+        <div class="lh-timer" id="logTimer">0:00</div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">0%</div>
       </div>
     </div>
-    <div class="session-meta">
-      <div class="set-total">Working sets: <b id="setCount">0</b>/<span id="setCountTotal">17</span></div>
-    </div>
-    <div id="exerciseList"></div>
+    <div id="exerciseList" style="margin-top:16px;"></div>
     <div class="finish-bar">
       <button class="btn-secondary" id="clearBtn">Clear</button>
       <button class="btn-primary" id="finishBtn">Finish &amp; Save</button>
@@ -364,36 +386,36 @@
 // ============ Program Definition ============
 const PROGRAM_DEFAULT = {
   upperA: { label:'Upper A', short:'UP A', exercises:[
-    {name:'Barbell Bench Press', target:'4 x 6-8', category:'chest'},
-    {name:'Barbell Row', target:'4 x 6-8', category:'back'},
-    {name:'Seated DB Shoulder Press', target:'3 x 8-10', category:'shoulders'},
-    {name:'Lat Pulldown', target:'2 x 10-12', category:'back-width'},
-    {name:'Lateral Raise', target:'2 x 12-15', category:'side-delt'},
-    {name:'EZ-Bar Curl', target:'2 x 10-12', category:'biceps'},
+    {name:'Barbell Bench Press', target:'4 x 6-8', category:'chest', intensity:'75-80% · 1-2 RIR'},
+    {name:'Barbell Row', target:'4 x 6-8', category:'back', intensity:'75-80% · 1-2 RIR'},
+    {name:'Seated DB Shoulder Press', target:'3 x 8-10', category:'shoulders', intensity:'70-75% · 1-2 RIR'},
+    {name:'Lat Pulldown', target:'2 x 10-12', category:'back-width', intensity:'65-70% · 1 RIR'},
+    {name:'Lateral Raise', target:'2 x 12-15', category:'side-delt', intensity:'55-65% · 0-1 RIR'},
+    {name:'EZ-Bar Curl', target:'2 x 10-12', category:'biceps', intensity:'65-70% · 1 RIR'},
   ]},
   lowerA: { label:'Lower A', short:'LOW A', exercises:[
-    {name:'Back Squat', target:'4 x 6-8', category:'quads'},
-    {name:'Romanian Deadlift', target:'3 x 8-10', category:'hamstrings'},
-    {name:'Leg Press', target:'3 x 10-12', category:'quads'},
-    {name:'Leg Curl', target:'2 x 10-12', category:'hamstrings'},
-    {name:'Standing Calf Raise', target:'3 x 12-15', category:'calves'},
-    {name:'Hanging Knee Raise', target:'2 x 12-15', category:'core'},
+    {name:'Back Squat', target:'4 x 6-8', category:'quads', intensity:'75-80% · 1-2 RIR'},
+    {name:'Leg Press', target:'3 x 10-12', category:'quads', intensity:'65-70% · 1 RIR'},
+    {name:'Leg Curl', target:'2 x 10-12', category:'hamstrings', intensity:'65-70% · 1 RIR'},
+    {name:'Standing Calf Raise', target:'3 x 12-15', category:'calves', intensity:'55-65% · 0-1 RIR'},
+    {name:'Hanging Knee Raise', target:'2 x 12-15', category:'core', intensity:'Bodyweight · 1 RIR'},
+    {name:'Cable Crunch', target:'3 x 12-15', category:'core', intensity:'55-65% · 0-1 RIR'},
   ]},
   upperB: { label:'Upper B', short:'UP B', exercises:[
-    {name:'Incline DB Press', target:'4 x 8-10', category:'chest'},
-    {name:'Seated Cable Row', target:'4 x 8-10', category:'back'},
-    {name:'Cable Face Pull', target:'2 x 12-15', category:'rear-delt'},
-    {name:'Overhead Tricep Extension', target:'3 x 10-12', category:'triceps'},
-    {name:'Hammer Curl', target:'2 x 10-12', category:'biceps'},
-    {name:'Rear Delt Fly', target:'2 x 12-15', category:'rear-delt'},
+    {name:'Incline DB Press', target:'4 x 8-10', category:'chest', intensity:'70-75% · 1-2 RIR'},
+    {name:'Seated Cable Row', target:'4 x 8-10', category:'back', intensity:'70-75% · 1-2 RIR'},
+    {name:'Cable Face Pull', target:'2 x 12-15', category:'rear-delt', intensity:'55-65% · 0-1 RIR'},
+    {name:'Overhead Tricep Extension', target:'3 x 10-12', category:'triceps', intensity:'65-70% · 1 RIR'},
+    {name:'Hammer Curl', target:'2 x 10-12', category:'biceps', intensity:'65-70% · 1 RIR'},
+    {name:'Rear Delt Fly', target:'2 x 12-15', category:'rear-delt', intensity:'55-65% · 0-1 RIR'},
   ]},
   lowerB: { label:'Lower B', short:'LOW B', exercises:[
-    {name:'Conventional Deadlift', target:'3 x 5', category:'posterior-chain'},
-    {name:'Front Squat', target:'3 x 8-10', category:'quads'},
-    {name:'Walking Lunge', target:'3 x 10/leg', category:'quads-glutes'},
-    {name:'Leg Extension', target:'2 x 12-15', category:'quads'},
-    {name:'Seated Calf Raise', target:'3 x 15-20', category:'calves'},
-    {name:'Weighted Plank', target:'3 x 30-45s', category:'core'},
+    {name:'Conventional Deadlift', target:'3 x 5', category:'posterior-chain', intensity:'80-85% · 1-2 RIR'},
+    {name:'Front Squat', target:'3 x 8-10', category:'quads', intensity:'70-75% · 1-2 RIR'},
+    {name:'Leg Extension', target:'2 x 12-15', category:'quads', intensity:'55-65% · 0-1 RIR'},
+    {name:'Seated Calf Raise', target:'3 x 15-20', category:'calves', intensity:'50-60% · 0-1 RIR'},
+    {name:'Weighted Plank', target:'3 x 30-45s', category:'core', intensity:'Bodyweight/Added Load · 1-2 RIR'},
+    {name:'Ab Wheel Rollout', target:'3 x 10-12', category:'core', intensity:'Bodyweight · 1 RIR'},
   ]},
 };
 const DAY_ORDER = ['upperA','lowerA','upperB','lowerB'];
@@ -451,6 +473,26 @@ let activeDayKey = null;
 let sessionData = {};    // in-progress edits for activeDate
 let editingSessionId = null;
 let swapContext = null;  // {dayKey, slotIndex}
+let timerInterval = null;
+let timerStart = null;
+
+function startWorkoutTimer(){
+  timerStart = Date.now();
+  updateTimerDisplay();
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(updateTimerDisplay, 1000);
+}
+function stopWorkoutTimer(){
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = null;
+}
+function updateTimerDisplay(){
+  const elapsed = Math.floor((Date.now() - timerStart) / 1000);
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  const el = $('#logTimer');
+  if(el) el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
 
 const $ = (sel, root=document) => root.querySelector(sel);
 const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
@@ -576,12 +618,12 @@ function openLogView(dateStr, dayKey, existingSession){
   $('#logTitle').textContent = day.label;
   $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   renderExercises();
+  startWorkoutTimer();
   switchView('log');
 }
 
 function renderExercises(){
   const day = getEffectiveDay(activeDayKey);
-  $('#setCountTotal').textContent = totalSetsFor(day);
   const list = $('#exerciseList');
   list.innerHTML = '';
 
@@ -600,7 +642,7 @@ function renderExercises(){
             <span class="ex-name">${ex.name}</span>
             <div class="swap-icon" data-slot="${slotIdx}">⇄</div>
           </div>
-          <div class="ex-target">${ex.target}</div>
+          <div class="ex-target">${ex.target}${ex.intensity ? ` &middot; <span class="ex-intensity">${ex.intensity}</span>` : ''}</div>
         </div>
         <div class="ex-refs">
           <div>Last: <span class="prev-val">${prevText}</span></div>
@@ -649,9 +691,11 @@ function renderExercises(){
 }
 
 function updateSetCounter(){
-  let done = 0;
-  Object.values(sessionData).forEach(sets => sets.forEach(s => { if(s.done) done++; }));
-  $('#setCount').textContent = done;
+  let done = 0, total = 0;
+  Object.values(sessionData).forEach(sets => { total += sets.length; sets.forEach(s => { if(s.done) done++; }); });
+  const pct = total ? Math.round((done/total)*100) : 0;
+  $('#progressFill').style.width = pct + '%';
+  $('#progressLabel').textContent = pct + '%';
 }
 
 // ============ Swap exercise ============
@@ -761,6 +805,7 @@ function finishSession(){
   }
 
   saveToLocalStorage();
+  stopWorkoutTimer();
   showToast('Workout saved');
   renderCalendar();
   renderHistory();
@@ -848,6 +893,7 @@ function switchView(name){
   $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   const tabbar = $('.tabbar');
   tabbar.style.display = name === 'log' ? 'none' : 'flex';
+  $('#topHeader').style.display = name === 'log' ? 'none' : 'block';
 }
 function switchTab(tab){
   switchView(tab);
@@ -913,7 +959,7 @@ function init(){
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
   $('#prevMonth').addEventListener('click', () => changeMonth(-1));
   $('#nextMonth').addEventListener('click', () => changeMonth(1));
-  $('#backToCalendar').addEventListener('click', () => { switchView('calendar'); renderCalendar(); });
+  $('#backToCalendar').addEventListener('click', () => { stopWorkoutTimer(); switchView('calendar'); renderCalendar(); });
   $('#finishBtn').addEventListener('click', finishSession);
   $('#clearBtn').addEventListener('click', clearLogEntries);
   $('#pickerCancel').addEventListener('click', () => closeSheet('pickerBackdrop'));
