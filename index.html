@@ -33,7 +33,6 @@
     margin:0; background: var(--bg); color: var(--chalk);
     font-family: 'Inter', sans-serif;
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
-    padding-top: env(safe-area-inset-top);
     min-height: 100vh;
   }
   .display{ font-family:'Oswald', sans-serif; text-transform: uppercase; letter-spacing: 0.02em; }
@@ -42,7 +41,7 @@
   header.topbar{
     position: sticky; top:0; z-index: 20;
     background: linear-gradient(180deg, var(--bg) 85%, transparent);
-    padding: 18px 20px 8px;
+    padding: calc(env(safe-area-inset-top) + 14px) 20px 8px;
   }
   header.topbar .brand{ display:flex; align-items:baseline; gap:10px; }
   header.topbar .brand .mark{
@@ -87,6 +86,7 @@
   .cal-cell.empty{ background:transparent; border-color:transparent; cursor:default; }
   .cal-cell.today{ border-color: var(--iron); }
   .cal-cell.logged{ background: rgba(201,138,75,0.14); border-color: rgba(201,138,75,0.4); }
+  .cal-cell.in-progress{ background: rgba(91,124,153,0.14); border-color: rgba(91,124,153,0.5); }
   .cal-cell .cal-daynum{ font-size:14px; }
   .cal-cell .cal-code{
     font-family:'Roboto Mono'; font-size:8px; color: var(--brass-bright); text-transform:uppercase; letter-spacing:0.03em;
@@ -154,7 +154,7 @@
   .sticky-log-header{
     position: sticky; top:0; z-index: 15;
     background: var(--bg);
-    margin: 0 -16px; padding: 18px 16px 12px;
+    margin: 0 -16px; padding: calc(env(safe-area-inset-top) + 14px) 16px 12px;
     border-bottom: 1px solid var(--hairline);
   }
   .log-header{ display:flex; align-items:center; gap:12px; }
@@ -192,11 +192,18 @@
   .ex-refs .prev-val{ color: var(--iron); font-weight:600; font-family:'Roboto Mono'; }
   .ex-refs .pr-val{ color: var(--brass-bright); font-weight:600; font-family:'Roboto Mono'; }
 
-  .col-labels{ display:grid; grid-template-columns: 22px 1fr 1fr 30px; gap:8px; margin-bottom:2px; }
+  .col-labels{ display:grid; grid-template-columns: 46px 1fr 1fr 30px; gap:8px; margin-bottom:2px; }
   .col-labels span{ font-size:9px; color:#5f636b; text-align:center; text-transform:uppercase; letter-spacing:0.06em; }
   .set-rows{ display:flex; flex-direction:column; gap:6px; }
-  .set-row{ display:grid; grid-template-columns: 22px 1fr 1fr 30px; gap:8px; align-items:center; }
-  .set-row .set-idx{ color: var(--chalk-mute); font-size:12px; font-family:'Roboto Mono'; text-align:center; }
+  .set-row{ display:grid; grid-template-columns: 46px 1fr 1fr 30px; gap:8px; align-items:center; }
+  .set-row .set-idx{ color: var(--iron); font-size:11px; font-family:'Roboto Mono'; font-weight:600; text-align:center; }
+  .set-controls{ display:flex; gap:8px; margin-top:10px; }
+  .set-ctrl-btn{
+    flex:1; text-align:center; font-size:11px; font-weight:600; color: var(--chalk-mute);
+    background: var(--bg-elevated); border:1px solid var(--hairline); border-radius:9px; padding:8px; cursor:pointer;
+    font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.03em;
+  }
+  .set-ctrl-btn.remove{ color: var(--danger); }
   .set-row input{
     width:100%; background: var(--bg-elevated); border:1px solid var(--hairline); color: var(--chalk);
     border-radius:9px; padding: 11px 8px; font-size:16px; text-align:center; font-family:'Roboto Mono'; font-weight:600;
@@ -298,7 +305,7 @@
     <div class="cal-grid" id="calGrid"></div>
     <div class="cal-legend">
       <div class="li"><span class="dot"></span> Logged workout</div>
-      <div class="li">Tap any day to log or review</div>
+      <div class="li"><span class="dot" style="background:var(--iron);"></span> In progress</div>
     </div>
   </div>
 
@@ -447,7 +454,7 @@ const STORAGE_KEY = 'ironlog:data';
 
 function saveToLocalStorage(){
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ customProgram: state.customProgram, sessions: state.sessions }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ customProgram: state.customProgram, sessions: state.sessions, drafts }));
   }catch(e){
     console.error('localStorage save failed', e);
   }
@@ -460,6 +467,7 @@ function loadFromLocalStorage(){
     const parsed = JSON.parse(raw);
     state.customProgram = parsed.customProgram || {};
     state.sessions = parsed.sessions || [];
+    drafts = parsed.drafts || {};
     return true;
   }catch(e){
     console.error('localStorage load failed', e);
@@ -475,9 +483,23 @@ let editingSessionId = null;
 let swapContext = null;  // {dayKey, slotIndex}
 let timerInterval = null;
 let timerStart = null;
+let drafts = {};         // { [date]: { dayKey, sessionData, timerStart } } — unsaved in-progress workouts
 
-function startWorkoutTimer(){
-  timerStart = Date.now();
+function saveDraft(){
+  if(!activeDate || editingSessionId) return; // don't draft when editing a completed/saved session
+  drafts[activeDate] = {
+    dayKey: activeDayKey,
+    sessionData: JSON.parse(JSON.stringify(sessionData)),
+    timerStart
+  };
+  saveToLocalStorage();
+}
+function clearDraft(dateStr){
+  delete drafts[dateStr];
+}
+
+function startWorkoutTimer(resumeFrom){
+  timerStart = resumeFrom || Date.now();
   updateTimerDisplay();
   if(timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(updateTimerDisplay, 1000);
@@ -530,12 +552,17 @@ function renderCalendar(){
     const dateObj = new Date(viewYear, viewMonth, d);
     const dateStr = fmtDate(dateObj);
     const session = findSessionByDate(dateStr);
+    const draft = !session ? drafts[dateStr] : null;
     const cell = document.createElement('div');
     cell.className = 'cal-cell';
     if(dateStr === today) cell.classList.add('today');
     if(session) cell.classList.add('logged');
+    if(draft) cell.classList.add('in-progress');
     if(dateStr > today) cell.classList.add('future');
-    cell.innerHTML = `<div class="cal-daynum">${d}</div>${session ? `<div class="cal-code">${PROGRAM_DEFAULT[session.dayKey].short}</div>` : ''}`;
+    let code = '';
+    if(session) code = PROGRAM_DEFAULT[session.dayKey].short;
+    else if(draft) code = PROGRAM_DEFAULT[draft.dayKey].short + '…';
+    cell.innerHTML = `<div class="cal-daynum">${d}</div>${code ? `<div class="cal-code">${code}</div>` : ''}`;
     cell.addEventListener('click', () => onDateTapped(dateStr));
     grid.appendChild(cell);
   }
@@ -562,6 +589,8 @@ function onDateTapped(dateStr){
   const existing = findSessionByDate(dateStr);
   if(existing){
     openLogView(dateStr, existing.dayKey, existing);
+  }else if(drafts[dateStr]){
+    openLogView(dateStr, drafts[dateStr].dayKey, null);
   }else{
     openPickerSheet(dateStr);
   }
@@ -600,25 +629,39 @@ function openLogView(dateStr, dayKey, existingSession){
   editingSessionId = existingSession ? existingSession.id : null;
   const day = getEffectiveDay(dayKey);
 
-  sessionData = {};
-  day.exercises.forEach((ex, idx) => {
-    const setCount = parseInt(ex.target);
-    let preset = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
-    if(existingSession){
-      const match = existingSession.exercises.find(e => e.name === ex.name);
-      if(match){
-        preset = match.sets.map(s => ({weight: s.weight ?? '', reps: s.reps ?? '', done: true}));
-        while(preset.length < setCount) preset.push({weight:'', reps:'', done:false});
+  const draft = !existingSession ? drafts[dateStr] : null;
+  const hasMatchingDraft = draft && draft.dayKey === dayKey;
+
+  if(hasMatchingDraft){
+    sessionData = draft.sessionData;
+    // top up in case a set was added/removed via another day's edit since the draft was made
+    day.exercises.forEach((ex, idx) => {
+      const setCount = parseInt(ex.target);
+      if(!sessionData[idx]) sessionData[idx] = [];
+      while(sessionData[idx].length < setCount) sessionData[idx].push({weight:'', reps:'', done:false});
+      while(sessionData[idx].length > setCount) sessionData[idx].pop();
+    });
+  }else{
+    sessionData = {};
+    day.exercises.forEach((ex, idx) => {
+      const setCount = parseInt(ex.target);
+      let preset = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
+      if(existingSession){
+        const match = existingSession.exercises.find(e => e.name === ex.name);
+        if(match){
+          preset = match.sets.map(s => ({weight: s.weight ?? '', reps: s.reps ?? '', done: true}));
+          while(preset.length < setCount) preset.push({weight:'', reps:'', done:false});
+        }
       }
-    }
-    sessionData[idx] = preset;
-  });
+      sessionData[idx] = preset;
+    });
+  }
 
   const d = new Date(dateStr + 'T00:00:00');
   $('#logTitle').textContent = day.label;
   $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
   renderExercises();
-  startWorkoutTimer();
+  startWorkoutTimer(hasMatchingDraft ? draft.timerStart : null);
   switchView('log');
 }
 
@@ -645,12 +688,15 @@ function renderExercises(){
           <div class="ex-target">${ex.target}${ex.intensity ? ` &middot; <span class="ex-intensity">${ex.intensity}</span>` : ''}</div>
         </div>
         <div class="ex-refs">
-          <div>Last: <span class="prev-val">${prevText}</span></div>
           <div>PR: <span class="pr-val">${prText}</span></div>
         </div>
       </div>
-      <div class="col-labels"><span></span><span>Weight (lb)</span><span>Reps</span><span>✓</span></div>
+      <div class="col-labels"><span>Last time</span><span>Weight (lb)</span><span>Reps</span><span>✓</span></div>
       <div class="set-rows" data-slot="${slotIdx}"></div>
+      <div class="set-controls">
+        <div class="set-ctrl-btn" data-action="add" data-slot="${slotIdx}">+ Add Set</div>
+        <div class="set-ctrl-btn remove" data-action="remove" data-slot="${slotIdx}">− Remove Set</div>
+      </div>
     `;
 
     $('.swap-icon', card).addEventListener('click', () => openSwapSheet(slotIdx));
@@ -660,8 +706,9 @@ function renderExercises(){
       const row = document.createElement('div');
       row.className = 'set-row';
       const prevSet = prev && prev.sets[idx] ? prev.sets[idx] : null;
+      const prevLabel = (prevSet && prevSet.weight != null) ? `${prevSet.weight}x${prevSet.reps ?? '-'}` : (idx+1);
       row.innerHTML = `
-        <div class="set-idx">${idx+1}</div>
+        <div class="set-idx">${prevLabel}</div>
         <input type="number" inputmode="decimal" placeholder="${prevSet && prevSet.weight != null ? prevSet.weight : '—'}" value="${set.weight}" data-field="weight">
         <input type="number" inputmode="numeric" placeholder="${prevSet && prevSet.reps != null ? prevSet.reps : '—'}" value="${set.reps}" data-field="reps">
         <div class="check ${set.done ? 'done' : ''}">${set.done ? '✓' : ''}</div>
@@ -685,9 +732,46 @@ function renderExercises(){
       });
       rows.appendChild(row);
     });
+
+    $('.set-ctrl-btn[data-action="add"]', card).addEventListener('click', () => addSet(slotIdx));
+    $('.set-ctrl-btn[data-action="remove"]', card).addEventListener('click', () => removeSet(slotIdx));
+
     list.appendChild(card);
   });
   updateSetCounter();
+}
+
+function parseTargetCount(target){
+  const m = target.match(/^(\d+)/);
+  return m ? parseInt(m[1]) : 1;
+}
+function bumpTargetCount(target, delta){
+  const m = target.match(/^(\d+)(.*)$/);
+  if(!m) return target;
+  const newCount = Math.max(1, parseInt(m[1]) + delta);
+  return newCount + m[2];
+}
+
+function persistSetCountChange(slotIdx, delta){
+  const day = getEffectiveDay(activeDayKey);
+  const ex = day.exercises[slotIdx];
+  const newTarget = bumpTargetCount(ex.target, delta);
+  if(!state.customProgram[activeDayKey]) state.customProgram[activeDayKey] = {};
+  state.customProgram[activeDayKey][slotIdx] = { name: ex.name, target: newTarget, category: ex.category, intensity: ex.intensity };
+  saveToLocalStorage();
+}
+
+function addSet(slotIdx){
+  sessionData[slotIdx].push({ weight:'', reps:'', done:false });
+  persistSetCountChange(slotIdx, 1);
+  renderExercises();
+}
+
+function removeSet(slotIdx){
+  if(sessionData[slotIdx].length <= 1) { showToast("Can't go below 1 set"); return; }
+  sessionData[slotIdx].pop();
+  persistSetCountChange(slotIdx, -1);
+  renderExercises();
 }
 
 function updateSetCounter(){
@@ -805,7 +889,9 @@ function finishSession(){
   }
 
   saveToLocalStorage();
+  clearDraft(activeDate);
   stopWorkoutTimer();
+  timerStart = null;
   showToast('Workout saved');
   renderCalendar();
   renderHistory();
@@ -819,6 +905,8 @@ function clearLogEntries(){
     const setCount = parseInt(ex.target);
     sessionData[slotIdx] = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
   });
+  clearDraft(activeDate);
+  startWorkoutTimer();
   renderExercises();
 }
 
@@ -959,7 +1047,7 @@ function init(){
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
   $('#prevMonth').addEventListener('click', () => changeMonth(-1));
   $('#nextMonth').addEventListener('click', () => changeMonth(1));
-  $('#backToCalendar').addEventListener('click', () => { stopWorkoutTimer(); switchView('calendar'); renderCalendar(); });
+  $('#backToCalendar').addEventListener('click', () => { saveDraft(); stopWorkoutTimer(); switchView('calendar'); renderCalendar(); });
   $('#finishBtn').addEventListener('click', finishSession);
   $('#clearBtn').addEventListener('click', clearLogEntries);
   $('#pickerCancel').addEventListener('click', () => closeSheet('pickerBackdrop'));
