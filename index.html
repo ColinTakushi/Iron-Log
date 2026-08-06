@@ -257,6 +257,16 @@
   .pr-item .pr-weight{ font-family:'Roboto Mono'; font-size:20px; font-weight:700; color: var(--brass-bright); text-align:right; }
   .pr-item .pr-weight span{ font-size:11px; color:var(--chalk-mute); display:block; font-weight:400; margin-top:1px; }
 
+  /* ---------- Stats ---------- */
+  .stat-card{
+    background: var(--bg-card); border:1px solid var(--hairline); border-radius:14px;
+    padding: 18px 18px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .stat-card .stat-label{ font-family:'Oswald'; text-transform:uppercase; font-size:13px; letter-spacing:0.03em; color: var(--chalk-dim); }
+  .stat-card .stat-sub{ font-size:11px; color: var(--chalk-mute); margin-top:3px; }
+  .stat-card .stat-value{ font-family:'Roboto Mono'; font-size:26px; font-weight:700; color: var(--brass-bright); text-align:right; }
+  .stat-card .stat-value span{ font-size:11px; color: var(--chalk-mute); font-weight:400; display:block; margin-top:2px; }
+
   /* ---------- Data tab ---------- */
   .data-card{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:14px; padding: 18px 16px; margin-bottom:14px; }
   .data-card h4{ margin:0 0 6px; font-family:'Oswald'; text-transform:uppercase; font-size:14px; letter-spacing:0.03em; }
@@ -270,11 +280,13 @@
   input[type=file]{ display:none; }
 
   .toast{
-    position: fixed; top: 14px; left:50%; transform: translateX(-50%) translateY(-60px);
+    position: fixed; top: calc(env(safe-area-inset-top) + 16px); left:50%;
+    transform: translateX(-50%) translateY(-12px);
+    opacity: 0; pointer-events: none;
     background: var(--brass); color:#1a1206; padding: 10px 18px; border-radius: 20px; font-size:13px; font-weight:600;
-    z-index:100; transition: transform .25s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 88%; text-align:center;
+    z-index:200; transition: opacity .25s ease, transform .25s ease; box-shadow: 0 4px 20px rgba(0,0,0,0.3); max-width: 88%; text-align:center;
   }
-  .toast.show{ transform: translateX(-50%) translateY(0); }
+  .toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
   ::-webkit-scrollbar{ width:0; height:0; }
 </style>
 </head>
@@ -289,6 +301,7 @@
   <div class="tab-btn active" data-tab="calendar">Calendar</div>
   <div class="tab-btn" data-tab="history">History</div>
   <div class="tab-btn" data-tab="prs">PRs</div>
+  <div class="tab-btn" data-tab="stats">Stats</div>
   <div class="tab-btn" data-tab="data">Data</div>
 </div>
 
@@ -327,7 +340,7 @@
     </div>
     <div id="exerciseList" style="margin-top:16px;"></div>
     <div class="finish-bar">
-      <button class="btn-secondary" id="clearBtn">Clear</button>
+      <button class="btn-danger-outline" id="clearBtn">Exit</button>
       <button class="btn-primary" id="finishBtn">Finish &amp; Save</button>
     </div>
   </div>
@@ -337,6 +350,9 @@
 
   <!-- PR VIEW -->
   <div class="view" id="view-prs"><div id="prList"></div></div>
+
+  <!-- STATS VIEW -->
+  <div class="view" id="view-stats"><div id="statsList"></div></div>
 
   <!-- DATA VIEW -->
   <div class="view" id="view-data">
@@ -384,6 +400,17 @@
       <button id="swapCustomBtn">Use</button>
     </div>
     <button class="sheet-close-btn" id="swapCancel">Cancel</button>
+  </div>
+</div>
+
+<!-- Confirm exit sheet -->
+<div class="sheet-backdrop" id="confirmBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Exit Workout?</h3>
+    <div class="sheet-sub">This will permanently discard everything logged for this session. This can't be undone.</div>
+    <button class="data-btn" style="background:var(--danger); color:#fff;" id="confirmExitBtn">Exit &amp; Discard</button>
+    <button class="sheet-close-btn" id="confirmCancelBtn">Cancel</button>
   </div>
 </div>
 
@@ -873,12 +900,20 @@ function finishSession(){
 
   if(!anyLogged){ showToast('Log at least one set first'); return; }
 
+  const elapsedSeconds = timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0;
+  let durationSeconds = elapsedSeconds;
+  if(editingSessionId){
+    const prior = state.sessions.find(s => s.id === editingSessionId);
+    durationSeconds = prior && prior.durationSeconds != null ? prior.durationSeconds : elapsedSeconds;
+  }
+
   const sessionObj = {
     id: editingSessionId || Date.now().toString(),
     date: activeDate,
     dayKey: activeDayKey,
     dayLabel: day.label,
-    exercises: exercisesOut
+    exercises: exercisesOut,
+    durationSeconds
   };
 
   if(editingSessionId){
@@ -899,15 +934,26 @@ function finishSession(){
   switchView('calendar');
 }
 
-function clearLogEntries(){
-  const day = getEffectiveDay(activeDayKey);
-  day.exercises.forEach((ex, slotIdx) => {
-    const setCount = parseInt(ex.target);
-    sessionData[slotIdx] = Array.from({length:setCount}, () => ({weight:'', reps:'', done:false}));
-  });
+function exitWorkout(){
+  openSheet('confirmBackdrop');
+}
+
+function performExitWorkout(){
+  closeSheet('confirmBackdrop');
+
+  if(editingSessionId){
+    state.sessions = state.sessions.filter(s => s.id !== editingSessionId);
+  }
   clearDraft(activeDate);
-  startWorkoutTimer();
-  renderExercises();
+  saveToLocalStorage();
+  stopWorkoutTimer();
+  timerStart = null;
+
+  showToast('Workout discarded');
+  renderCalendar();
+  renderHistory();
+  renderPRs();
+  switchView('calendar');
 }
 
 // ============ History ============
@@ -970,6 +1016,87 @@ function renderPRs(){
   if(!any) container.innerHTML = `<div class="empty-state"><div class="mark-big"></div><p>No PRs recorded yet. Your heaviest logged set for each lift will show up here.</p></div>`;
 }
 
+// ============ Stats ============
+function weekKey(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - d.getDay());
+  return fmtDate(sunday);
+}
+
+function computeTotalSeconds(){
+  return state.sessions.reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
+}
+
+function formatDuration(totalSeconds){
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.round((totalSeconds % 3600) / 60);
+  if(hrs === 0) return `${mins}m`;
+  return `${hrs}h ${mins}m`;
+}
+
+function computeWeekStreak(){
+  if(!state.sessions.length) return 0;
+  const weeks = new Set(state.sessions.map(s => weekKey(s.date)));
+  let cursorWeek = weekKey(todayStr());
+  if(!weeks.has(cursorWeek)){
+    const d = new Date(cursorWeek + 'T00:00:00');
+    d.setDate(d.getDate() - 7);
+    cursorWeek = fmtDate(d);
+  }
+  let streak = 0;
+  while(weeks.has(cursorWeek)){
+    streak++;
+    const d = new Date(cursorWeek + 'T00:00:00');
+    d.setDate(d.getDate() - 7);
+    cursorWeek = fmtDate(d);
+  }
+  return streak;
+}
+
+function computeTotalVolume(){
+  let total = 0;
+  state.sessions.forEach(s => s.exercises.forEach(ex => ex.sets.forEach(set => {
+    if(set.weight != null && set.weight !== '' && set.reps != null && set.reps !== ''){
+      total += set.weight * set.reps;
+    }
+  })));
+  return total;
+}
+
+function renderStats(){
+  const container = $('#statsList');
+  container.innerHTML = '';
+
+  if(!state.sessions.length){
+    container.innerHTML = `<div class="empty-state"><div class="mark-big"></div><p>No workouts logged yet. Your training stats will show up here once you finish your first session.</p></div>`;
+    return;
+  }
+
+  const totalSeconds = computeTotalSeconds();
+  const streak = computeWeekStreak();
+  const volume = computeTotalVolume();
+
+  const stats = [
+    { label:'Total Time Trained', value: formatDuration(totalSeconds), sub: `${state.sessions.length} workout${state.sessions.length===1?'':'s'} logged` },
+    { label:'Week Streak', value: streak, unit: streak === 1 ? 'week' : 'weeks', sub: 'consecutive weeks with a workout' },
+    { label:'Total Volume Lifted', value: volume.toLocaleString(), unit:'lbs', sub: 'sum of weight × reps, all time' },
+  ];
+
+  stats.forEach(stat => {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.innerHTML = `
+      <div>
+        <div class="stat-label">${stat.label}</div>
+        <div class="stat-sub">${stat.sub}</div>
+      </div>
+      <div class="stat-value">${stat.value}${stat.unit ? `<span>${stat.unit}</span>` : ''}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
 // ============ Sheets ============
 function openSheet(id){ $('#'+id).classList.add('show'); }
 function closeSheet(id){ $('#'+id).classList.remove('show'); }
@@ -987,6 +1114,7 @@ function switchTab(tab){
   switchView(tab);
   if(tab === 'history') renderHistory();
   if(tab === 'prs') renderPRs();
+  if(tab === 'stats') renderStats();
 }
 
 // ============ File Save / Load ============
@@ -1049,11 +1177,14 @@ function init(){
   $('#nextMonth').addEventListener('click', () => changeMonth(1));
   $('#backToCalendar').addEventListener('click', () => { saveDraft(); stopWorkoutTimer(); switchView('calendar'); renderCalendar(); });
   $('#finishBtn').addEventListener('click', finishSession);
-  $('#clearBtn').addEventListener('click', clearLogEntries);
+  $('#clearBtn').addEventListener('click', exitWorkout);
   $('#pickerCancel').addEventListener('click', () => closeSheet('pickerBackdrop'));
   $('#swapCancel').addEventListener('click', () => closeSheet('swapBackdrop'));
+  $('#confirmExitBtn').addEventListener('click', performExitWorkout);
+  $('#confirmCancelBtn').addEventListener('click', () => closeSheet('confirmBackdrop'));
   $('#pickerBackdrop').addEventListener('click', e => { if(e.target.id === 'pickerBackdrop') closeSheet('pickerBackdrop'); });
   $('#swapBackdrop').addEventListener('click', e => { if(e.target.id === 'swapBackdrop') closeSheet('swapBackdrop'); });
+  $('#confirmBackdrop').addEventListener('click', e => { if(e.target.id === 'confirmBackdrop') closeSheet('confirmBackdrop'); });
 
   $('#saveFileBtn').addEventListener('click', exportData);
   $('#loadFileBtn').addEventListener('click', () => $('#fileInput').click());
