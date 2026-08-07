@@ -158,13 +158,19 @@
     border-bottom: 1px solid var(--hairline);
   }
   .log-header{ display:flex; align-items:center; gap:12px; }
-  .log-header .lh-timer{ margin-left:auto; font-family:'Roboto Mono'; font-size:20px; font-weight:600; color: var(--brass-bright); }
+  .log-header .lh-timer{ margin-left:auto; font-family:'Roboto Mono'; font-size:20px; font-weight:600; color: var(--brass-bright); cursor:pointer; }
+  .edit-field{ margin-bottom:14px; }
+  .edit-field label{ display:block; font-size:11px; color: var(--chalk-mute); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
+  .edit-field input{
+    width:100%; background: var(--bg-card); border:1px solid var(--hairline); color: var(--chalk);
+    border-radius:12px; padding: 12px 14px; font-size:15px; font-family:'Roboto Mono';
+  }
   .back-arrow{
     width:36px; height:36px; border-radius:10px; background: var(--bg-card); border:1px solid var(--hairline);
     display:flex; align-items:center; justify-content:center; font-size:17px; color: var(--chalk-dim); cursor:pointer; flex-shrink:0;
   }
   .log-header .lh-title{ font-family:'Oswald'; font-size:18px; text-transform:uppercase; letter-spacing:0.02em; }
-  .log-header .lh-date{ font-size:11px; color: var(--chalk-mute); margin-top:1px; }
+  .log-header .lh-date{ font-size:11px; color: var(--iron); margin-top:1px; cursor:pointer; text-decoration: underline dotted; }
 
   .session-meta{ display:flex; justify-content:space-between; align-items:center; margin: 14px 4px 12px; }
   .session-meta .set-total{ font-size:12px; color: var(--chalk-mute); }
@@ -357,6 +363,11 @@
   <!-- DATA VIEW -->
   <div class="view" id="view-data">
     <div class="data-card">
+      <h4>Default Program</h4>
+      <p>See the original 4-day split exactly as it shipped, regardless of any exercise swaps or set changes you've made since.</p>
+      <button class="data-btn secondary" id="viewDefaultBtn">View Original Plan</button>
+    </div>
+    <div class="data-card">
       <h4>Auto-Save</h4>
       <p>Your workouts, PRs, and exercise swaps save automatically to this browser as you go — no action needed. This only persists on this device and browser, though, so use the backup below if you switch phones or clear browser data.</p>
     </div>
@@ -403,7 +414,16 @@
   </div>
 </div>
 
-<!-- Confirm exit sheet -->
+<!-- Default program reference sheet -->
+<div class="sheet-backdrop" id="defaultProgramBackdrop">
+  <div class="sheet" style="max-height:88vh;">
+    <div class="sheet-handle"></div>
+    <h3>Original Program</h3>
+    <div class="sheet-sub">Reference only — this doesn't change your active plan, even if you've swapped exercises.</div>
+    <div id="defaultProgramList"></div>
+    <button class="sheet-close-btn" id="defaultProgramCloseBtn">Close</button>
+  </div>
+</div>
 <div class="sheet-backdrop" id="confirmBackdrop">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -411,6 +431,25 @@
     <div class="sheet-sub">This will permanently discard everything logged for this session. This can't be undone.</div>
     <button class="data-btn" style="background:var(--danger); color:#fff;" id="confirmExitBtn">Exit &amp; Discard</button>
     <button class="sheet-close-btn" id="confirmCancelBtn">Cancel</button>
+  </div>
+</div>
+
+<!-- Edit date/duration sheet -->
+<div class="sheet-backdrop" id="editDetailsBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Edit Workout Details</h3>
+    <div class="sheet-sub">Change the date or manually correct the tracked duration.</div>
+    <div class="edit-field">
+      <label>Date</label>
+      <input type="date" id="editDateInput">
+    </div>
+    <div class="edit-field">
+      <label>Duration (minutes)</label>
+      <input type="number" inputmode="numeric" id="editDurationInput" min="0">
+    </div>
+    <button class="data-btn" id="editDetailsApplyBtn" style="margin-top:6px;">Apply</button>
+    <button class="sheet-close-btn" id="editDetailsCancelBtn">Cancel</button>
   </div>
 </div>
 
@@ -474,14 +513,15 @@ const PRESETS = {
 // ============ App State ============
 let state = {
   customProgram: {},   // { dayKey: { slotIndex: {name, target, category} } }
-  sessions: []          // { id, date:'YYYY-MM-DD', dayKey, dayLabel, exercises:[{name,sets:[{weight,reps}]}] }
+  sessions: [],         // { id, date:'YYYY-MM-DD', dayKey, dayLabel, exercises:[{name,sets:[{weight,reps}]}] }
+  customExerciseHistory: []   // ['Curtsy Lunge', 'Single-Leg RDL', ...] most recent first
 };
 
 const STORAGE_KEY = 'ironlog:data';
 
 function saveToLocalStorage(){
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ customProgram: state.customProgram, sessions: state.sessions, drafts }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ customProgram: state.customProgram, sessions: state.sessions, drafts, customExerciseHistory: state.customExerciseHistory }));
   }catch(e){
     console.error('localStorage save failed', e);
   }
@@ -494,6 +534,7 @@ function loadFromLocalStorage(){
     const parsed = JSON.parse(raw);
     state.customProgram = parsed.customProgram || {};
     state.sessions = parsed.sessions || [];
+    state.customExerciseHistory = parsed.customExerciseHistory || [];
     drafts = parsed.drafts || {};
     return true;
   }catch(e){
@@ -510,6 +551,7 @@ let editingSessionId = null;
 let swapContext = null;  // {dayKey, slotIndex}
 let timerInterval = null;
 let timerStart = null;
+let durationManuallySet = false;
 let drafts = {};         // { [date]: { dayKey, sessionData, timerStart } } — unsaved in-progress workouts
 
 function saveDraft(){
@@ -654,6 +696,7 @@ function openLogView(dateStr, dayKey, existingSession){
   activeDate = dateStr;
   activeDayKey = dayKey;
   editingSessionId = existingSession ? existingSession.id : null;
+  durationManuallySet = false;
   const day = getEffectiveDay(dayKey);
 
   const draft = !existingSession ? drafts[dateStr] : null;
@@ -686,7 +729,7 @@ function openLogView(dateStr, dayKey, existingSession){
 
   const d = new Date(dateStr + 'T00:00:00');
   $('#logTitle').textContent = day.label;
-  $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) + ' ✎';
   renderExercises();
   startWorkoutTimer(hasMatchingDraft ? draft.timerStart : null);
   switchView('log');
@@ -815,9 +858,30 @@ function openSwapSheet(slotIdx){
   const day = getEffectiveDay(activeDayKey);
   const ex = day.exercises[slotIdx];
   $('#swapSubLabel').textContent = `Currently: ${ex.name}`;
-  const presets = PRESETS[ex.category] || [];
   const container = $('#swapPresets');
   container.innerHTML = '';
+
+  if(state.customExerciseHistory.length){
+    const heading = document.createElement('div');
+    heading.className = 'section-label';
+    heading.style.margin = '0 0 8px';
+    heading.textContent = 'Your Custom Exercises';
+    container.appendChild(heading);
+    state.customExerciseHistory.forEach(name => {
+      const btn = document.createElement('div');
+      btn.className = 'preset-btn' + (name === ex.name ? ' current' : '');
+      btn.textContent = name;
+      btn.addEventListener('click', () => applySwap(slotIdx, name, ex.target, ex.category));
+      container.appendChild(btn);
+    });
+    const heading2 = document.createElement('div');
+    heading2.className = 'section-label';
+    heading2.style.margin = '16px 0 8px';
+    heading2.textContent = 'Presets';
+    container.appendChild(heading2);
+  }
+
+  const presets = PRESETS[ex.category] || [];
   presets.forEach(name => {
     const btn = document.createElement('div');
     btn.className = 'preset-btn' + (name === ex.name ? ' current' : '');
@@ -827,6 +891,12 @@ function openSwapSheet(slotIdx){
   });
   $('#swapCustomInput').value = '';
   openSheet('swapBackdrop');
+}
+
+function addToCustomHistory(name){
+  state.customExerciseHistory = state.customExerciseHistory.filter(n => n.toLowerCase() !== name.toLowerCase());
+  state.customExerciseHistory.unshift(name);
+  if(state.customExerciseHistory.length > 20) state.customExerciseHistory = state.customExerciseHistory.slice(0, 20);
 }
 
 function applySwap(slotIdx, name, target, category){
@@ -846,6 +916,8 @@ $('#swapCustomBtn').addEventListener('click', () => {
   if(!val) return;
   const day = getEffectiveDay(activeDayKey);
   const ex = day.exercises[swapContext.slotIdx];
+  addToCustomHistory(val);
+  saveToLocalStorage();
   applySwap(swapContext.slotIdx, val, ex.target, ex.category);
 });
 
@@ -902,7 +974,7 @@ function finishSession(){
 
   const elapsedSeconds = timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0;
   let durationSeconds = elapsedSeconds;
-  if(editingSessionId){
+  if(editingSessionId && !durationManuallySet){
     const prior = state.sessions.find(s => s.id === editingSessionId);
     durationSeconds = prior && prior.durationSeconds != null ? prior.durationSeconds : elapsedSeconds;
   }
@@ -1098,6 +1170,59 @@ function renderStats(){
 }
 
 // ============ Sheets ============
+function renderDefaultProgram(){
+  const container = $('#defaultProgramList');
+  container.innerHTML = '';
+  DAY_ORDER.forEach(dayKey => {
+    const day = PROGRAM_DEFAULT[dayKey];
+    const block = document.createElement('div');
+    block.style.marginBottom = '18px';
+    let rows = '';
+    day.exercises.forEach(ex => {
+      rows += `<div class="h-ex"><span>${ex.name}</span><span class="h-sets">${ex.target}</span></div>`;
+    });
+    block.innerHTML = `
+      <div class="h-day display" style="margin-bottom:8px;">${day.label}</div>
+      ${rows}
+    `;
+    container.appendChild(block);
+  });
+}
+
+function openEditDetailsSheet(){
+  $('#editDateInput').value = activeDate;
+  const elapsedSeconds = timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0;
+  $('#editDurationInput').value = Math.round(elapsedSeconds / 60);
+  openSheet('editDetailsBackdrop');
+}
+
+function applyEditDetails(){
+  const newDate = $('#editDateInput').value;
+  const newDurationMin = parseFloat($('#editDurationInput').value);
+
+  if(newDate && newDate !== activeDate){
+    const conflict = findSessionByDate(newDate);
+    if(conflict && conflict.id !== editingSessionId){
+      showToast('That date already has a workout logged');
+      return;
+    }
+    clearDraft(activeDate);
+    activeDate = newDate;
+    const d = new Date(activeDate + 'T00:00:00');
+    $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) + ' ✎';
+  }
+
+  if(!isNaN(newDurationMin) && newDurationMin >= 0){
+    timerStart = Date.now() - (newDurationMin * 60000);
+    durationManuallySet = true;
+    updateTimerDisplay();
+  }
+
+  renderExercises();
+  closeSheet('editDetailsBackdrop');
+  showToast('Details updated');
+}
+
 function openSheet(id){ $('#'+id).classList.add('show'); }
 function closeSheet(id){ $('#'+id).classList.remove('show'); }
 
@@ -1119,7 +1244,7 @@ function switchTab(tab){
 
 // ============ File Save / Load ============
 function exportData(){
-  const payload = { version: 1, exportedAt: new Date().toISOString(), customProgram: state.customProgram, sessions: state.sessions };
+  const payload = { version: 1, exportedAt: new Date().toISOString(), customProgram: state.customProgram, sessions: state.sessions, customExerciseHistory: state.customExerciseHistory };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1140,6 +1265,7 @@ function importData(file){
       const parsed = JSON.parse(e.target.result);
       state.customProgram = parsed.customProgram || {};
       state.sessions = parsed.sessions || [];
+      state.customExerciseHistory = parsed.customExerciseHistory || [];
       saveToLocalStorage();
       $('#loadStatus').textContent = `Loaded ${state.sessions.length} session(s)`;
       renderCalendar(); renderHistory(); renderPRs();
@@ -1185,6 +1311,14 @@ function init(){
   $('#pickerBackdrop').addEventListener('click', e => { if(e.target.id === 'pickerBackdrop') closeSheet('pickerBackdrop'); });
   $('#swapBackdrop').addEventListener('click', e => { if(e.target.id === 'swapBackdrop') closeSheet('swapBackdrop'); });
   $('#confirmBackdrop').addEventListener('click', e => { if(e.target.id === 'confirmBackdrop') closeSheet('confirmBackdrop'); });
+  $('#viewDefaultBtn').addEventListener('click', () => { renderDefaultProgram(); openSheet('defaultProgramBackdrop'); });
+  $('#logDate').addEventListener('click', openEditDetailsSheet);
+  $('#logTimer').addEventListener('click', openEditDetailsSheet);
+  $('#editDetailsApplyBtn').addEventListener('click', applyEditDetails);
+  $('#editDetailsCancelBtn').addEventListener('click', () => closeSheet('editDetailsBackdrop'));
+  $('#editDetailsBackdrop').addEventListener('click', e => { if(e.target.id === 'editDetailsBackdrop') closeSheet('editDetailsBackdrop'); });
+  $('#defaultProgramCloseBtn').addEventListener('click', () => closeSheet('defaultProgramBackdrop'));
+  $('#defaultProgramBackdrop').addEventListener('click', e => { if(e.target.id === 'defaultProgramBackdrop') closeSheet('defaultProgramBackdrop'); });
 
   $('#saveFileBtn').addEventListener('click', exportData);
   $('#loadFileBtn').addEventListener('click', () => $('#fileInput').click());
