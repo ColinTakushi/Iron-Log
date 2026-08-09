@@ -1,5 +1,7 @@
 # Iron Log
 
+[![Tests](https://github.com/ColinTakushi/Iron-Log/actions/workflows/tests.yml/badge.svg)](https://github.com/ColinTakushi/Iron-Log/actions/workflows/tests.yml)
+
 A single-file, zero-dependency workout tracker built for a 4-day upper/lower hypertrophy split. No build step, no backend, no database — just a static page that runs entirely in the browser.
 
 ## Why

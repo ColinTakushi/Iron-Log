@@ -1,0 +1,14 @@
+{
+  "name": "iron-log",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Dev-only test tooling for Iron Log. The shipped app (index.html) has zero runtime dependencies; this package.json exists solely to run the Playwright test suite in CI.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
