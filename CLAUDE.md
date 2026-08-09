@@ -1,6 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. Read this before making changes.
+
+## What this is
+
+A single-file, zero-dependency workout tracker built for a specific 4-day upper/lower hypertrophy program. It's a personal tool, hosted as a static site via GitHub Pages, used daily on an iPhone (added to the Home Screen as a pseudo-app).
+
+There is exactly one file that matters: `index.html`. Everything — HTML, CSS, and JS — lives in that single file. There is no build step, no bundler, no framework, no `package.json`. This is intentional; keep it that way unless the user explicitly asks to restructure.
 
 ## Running the app
 
@@ -13,6 +19,18 @@ xdg-open index.html      # Linux
 ```
 
 For mobile PWA testing, host it via GitHub Pages (Settings → Pages, source: `main`, root) and use "Add to Home Screen" on the device.
+
+## Tech constraints (important)
+
+- Plain HTML/CSS/vanilla JS only. No React, no npm, no build tooling.
+- Fonts load from Google Fonts CDN (`Oswald`, `Inter`, `Roboto Mono`). No other external dependencies.
+- Data persists via `localStorage` (key: `ironlog:data`). This only works because the app is hosted at a real `https://` URL via GitHub Pages — it was previously built for Claude.ai's artifact preview and hit iOS Safari restrictions around opening local files, which is why it ended up hosted here. Don't reintroduce anything that assumes a local `file://` context.
+- Manual JSON export/import ("Data" tab) exists as a backup mechanism alongside auto-save, for moving data between browsers/devices.
+- Deployed via GitHub Pages from this repo's root (`index.html` is the required filename/location for that to work).
+
+## Design language
+
+Dark theme, "iron & chalk" palette (see CSS `:root` variables: `--bg`, `--chalk`, `--iron`, `--brass`, etc.). Typography: `Oswald` for headers/labels (uppercase, condensed), `Roboto Mono` for numbers (weights, reps, timers), `Inter` for body text. Keep this consistent — don't introduce a different visual language for new features.
 
 ## Architecture
 
@@ -38,7 +56,7 @@ Everything persists to `localStorage` under the key `ironlog:data`. The shape st
 
 ### Program definition
 
-`PROGRAM_DEFAULT` defines the four workout days (`upperA`, `lowerA`, `upperB`, `lowerB`), each with an ordered array of exercises. `DAY_ORDER` controls rotation sequence.
+`PROGRAM_DEFAULT` defines the four workout days (`upperA`, `lowerA`, `upperB`, `lowerB`), each with an ordered array of exercises, and never changes at runtime — it's the reference used by the "View Original Plan" sheet. `DAY_ORDER` controls rotation sequence.
 
 `PRESETS` maps exercise category strings (e.g. `'chest'`, `'quads'`) to lists of swap alternatives.
 
@@ -63,3 +81,23 @@ Sheets (bottom drawers) are toggled via `openSheet(id)` / `closeSheet(id)` which
 ### PR detection
 
 `getPR(exerciseName)` scans all sessions for the heaviest weight logged for that exercise (tie-broken by reps). It runs on every `renderExercises()` call and is also used in the PR tab via `renderPRs()`.
+
+## Key behaviors already implemented (don't regress these)
+
+- Drafts persist across navigation: leaving the log view via the back arrow saves an in-memory + localStorage draft (sets, weights, timer start) so nothing is lost. The timer keeps counting real elapsed time even while away — it's wall-clock based (`timerStart` timestamp), not a pausable stopwatch.
+- Exit button: destructive — discards the current session's data (deletes it from `state.sessions` if editing a saved one, or clears the draft if new) and requires confirmation via the in-app sheet (`#confirmBackdrop`). Do not use `window.confirm()`/`alert()`/`prompt()` anywhere in this app — they were found to be unreliable in sandboxed/embedded contexts; all confirmations use the custom bottom-sheet pattern instead.
+- Stats tab: total time trained (sum of `durationSeconds`), week streak (consecutive Sun–Sat weeks with ≥1 session, current week doesn't break the streak if not yet trained), total volume (Σ weight × reps across every set ever logged).
+- Editable date/duration: tapping the date or timer in the log view header opens a sheet to change either. Changing date blocks if the target date already has a session (one session per date). Editing duration re-bases `timerStart` rather than storing a separate override value.
+- iOS safe-area handling: sticky headers bake `env(safe-area-inset-top)` directly into their own padding rather than relying on `<body>` padding, because sticky positioning can bypass ancestor padding once "stuck" — this was a real bug on iPhone 13 that took a couple iterations to fix. Keep this pattern for any new sticky/fixed elements.
+
+## Known limitations (by design, not bugs)
+
+- `localStorage` is per-browser/per-device — data doesn't sync between Safari and Firefox on the same phone, or between phone and desktop. The JSON export/import in the Data tab is the intended workaround; don't try to add real sync/backend unless asked.
+- Older sessions logged before duration tracking was added have `durationSeconds` undefined/0 — Stats tab total time only reflects sessions logged after that feature existed.
+- Single session per calendar date — the data model doesn't support multiple workouts logged on the same day.
+
+## When making changes
+
+- Keep everything in `index.html`. If a change is substantial, mirror the existing code organization (state → helpers → render functions → event wiring in `init()`), which is laid out roughly in that order with `// ============ Section ============` comments.
+- After editing, there's no build/test step — just verify the HTML is well-formed and open it in a browser to sanity-check.
+- The user deploys by pushing `index.html` to this repo's root; GitHub Pages picks it up automatically.
