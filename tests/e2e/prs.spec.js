@@ -39,6 +39,7 @@ test.describe('PR (personal record) tracking', () => {
     await expect(firstRow).toHaveClass(/is-pr/);
 
     await page.locator('#finishBtn').click();
+    await page.locator('#summaryDoneBtn').click();
     await page.locator('.tab-btn[data-tab="prs"]').click();
     await expect(page.locator('.pr-item', { hasText: 'Barbell Bench Press' }).locator('.pr-weight')).toContainText('145');
   });

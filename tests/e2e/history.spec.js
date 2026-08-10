@@ -24,7 +24,8 @@ test.describe('history: edit and delete', () => {
 
     await firstRow.locator('input[data-field="weight"]').fill('145');
     await page.locator('#finishBtn').click();
-    await expect(page.locator('#toast')).toHaveText('Workout saved');
+    await expect(page.locator('#summaryBackdrop')).toBeVisible();
+    await page.locator('#summaryDoneBtn').click();
 
     await page.locator('.tab-btn[data-tab="history"]').click();
     await expect(page.locator('.history-item')).toHaveCount(1);

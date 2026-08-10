@@ -273,6 +273,18 @@
   .stat-card .stat-value{ font-family:'Roboto Mono'; font-size:26px; font-weight:700; color: var(--brass-bright); text-align:right; }
   .stat-card .stat-value span{ font-size:11px; color: var(--chalk-mute); font-weight:400; display:block; margin-top:2px; }
 
+  /* ---------- Workout summary sheet ---------- */
+  .summary-stat{
+    background: var(--bg-card); border:1px solid var(--hairline); border-radius:14px;
+    padding: 18px 18px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;
+  }
+  .summary-stat .stat-label{ font-family:'Oswald'; text-transform:uppercase; font-size:13px; letter-spacing:0.03em; color: var(--chalk-dim); }
+  .summary-stat .stat-value{ font-family:'Roboto Mono'; font-size:26px; font-weight:700; color: var(--brass-bright); text-align:right; }
+  .summary-pr{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:12px; padding: 14px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+  .summary-pr .pr-name{ font-size:14px; font-weight:600; }
+  .summary-pr .pr-weight{ font-family:'Roboto Mono'; font-size:20px; font-weight:700; color: var(--brass-bright); text-align:right; }
+  .summary-pr .pr-weight span{ font-size:11px; color:var(--chalk-mute); display:block; font-weight:400; margin-top:1px; }
+
   /* ---------- Data tab ---------- */
   .data-card{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:14px; padding: 18px 16px; margin-bottom:14px; }
   .data-card h4{ margin:0 0 6px; font-family:'Oswald'; text-transform:uppercase; font-size:14px; letter-spacing:0.03em; }
@@ -422,6 +434,24 @@
     <div class="sheet-sub">Reference only — this doesn't change your active plan, even if you've swapped exercises.</div>
     <div id="defaultProgramList"></div>
     <button class="sheet-close-btn" id="defaultProgramCloseBtn">Close</button>
+  </div>
+</div>
+<!-- Post-workout summary sheet -->
+<div class="sheet-backdrop" id="summaryBackdrop">
+  <div class="sheet" style="max-height:88vh;">
+    <div class="sheet-handle"></div>
+    <h3 id="summaryTitle">Workout Complete</h3>
+    <div class="sheet-sub" id="summarySub">Nice work — here's how it went.</div>
+    <div class="summary-stat">
+      <div><div class="stat-label">Duration</div></div>
+      <div class="stat-value" id="summaryDuration"></div>
+    </div>
+    <div class="summary-stat">
+      <div><div class="stat-label">Weight Lifted</div></div>
+      <div class="stat-value" id="summaryVolume"></div>
+    </div>
+    <div id="summaryPRs"></div>
+    <button class="data-btn" id="summaryDoneBtn" style="margin-top:6px;">Done</button>
   </div>
 </div>
 <div class="sheet-backdrop" id="confirmBackdrop">
@@ -933,9 +963,10 @@ function getPreviousSets(exerciseName, beforeDate){
   return null;
 }
 
-function getPR(exerciseName){
+function getPR(exerciseName, excludeSessionId){
   let best = null;
   state.sessions.forEach(s => {
+    if(excludeSessionId && s.id === excludeSessionId) return;
     const ex = s.exercises.find(e => e.name === exerciseName);
     if(!ex) return;
     ex.sets.forEach(set => {
@@ -955,6 +986,53 @@ function formatPrevText(prev){
 }
 
 // ============ Finish / Save / Clear ============
+function computeSessionVolume(exercisesOut){
+  let total = 0;
+  exercisesOut.forEach(ex => ex.sets.forEach(set => {
+    if(set.weight != null && set.weight !== '' && set.reps != null && set.reps !== ''){
+      total += set.weight * set.reps;
+    }
+  }));
+  return total;
+}
+
+function computeSessionPRs(exercisesOut, excludeSessionId){
+  const prs = [];
+  exercisesOut.forEach(ex => {
+    const prior = getPR(ex.name, excludeSessionId);
+    let best = null;
+    ex.sets.forEach(set => {
+      if(set.weight == null || set.weight === '') return;
+      if(!best || set.weight > best.weight || (set.weight === best.weight && (set.reps||0) > (best.reps||0))){
+        best = { weight: set.weight, reps: set.reps };
+      }
+    });
+    if(best && (!prior || best.weight > prior.weight || (best.weight === prior.weight && (best.reps||0) > (prior.reps||0)))){
+      prs.push({ name: ex.name, weight: best.weight, reps: best.reps });
+    }
+  });
+  return prs;
+}
+
+function openWorkoutSummary({ dayLabel, durationSeconds, volume, prs }){
+  $('#summaryTitle').textContent = `${dayLabel} Complete`;
+  $('#summaryDuration').textContent = formatDuration(durationSeconds);
+  $('#summaryVolume').textContent = `${volume.toLocaleString()} lbs`;
+  const prsContainer = $('#summaryPRs');
+  if(prs.length){
+    prsContainer.innerHTML = `<div class="section-label" style="margin:20px 4px 10px;">New PRs This Session</div>` +
+      prs.map(pr => `
+        <div class="summary-pr">
+          <div><div class="pr-name">${pr.name}</div></div>
+          <div class="pr-weight">${pr.weight}<span>x${pr.reps ?? '-'} reps</span></div>
+        </div>
+      `).join('');
+  }else{
+    prsContainer.innerHTML = `<div class="section-label" style="margin:20px 4px 10px;">No new PRs this session</div>`;
+  }
+  openSheet('summaryBackdrop');
+}
+
 function finishSession(){
   const day = getEffectiveDay(activeDayKey);
   const exercisesOut = [];
@@ -971,6 +1049,9 @@ function finishSession(){
   });
 
   if(!anyLogged){ showToast('Log at least one set first'); return; }
+
+  const sessionVolume = computeSessionVolume(exercisesOut);
+  const sessionPRs = computeSessionPRs(exercisesOut, editingSessionId);
 
   const elapsedSeconds = timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0;
   let durationSeconds = elapsedSeconds;
@@ -999,11 +1080,11 @@ function finishSession(){
   clearDraft(activeDate);
   stopWorkoutTimer();
   timerStart = null;
-  showToast('Workout saved');
   renderCalendar();
   renderHistory();
   renderPRs();
   switchView('calendar');
+  openWorkoutSummary({ dayLabel: day.label, durationSeconds, volume: sessionVolume, prs: sessionPRs });
 }
 
 function exitWorkout(){
@@ -1319,6 +1400,8 @@ function init(){
   $('#editDetailsBackdrop').addEventListener('click', e => { if(e.target.id === 'editDetailsBackdrop') closeSheet('editDetailsBackdrop'); });
   $('#defaultProgramCloseBtn').addEventListener('click', () => closeSheet('defaultProgramBackdrop'));
   $('#defaultProgramBackdrop').addEventListener('click', e => { if(e.target.id === 'defaultProgramBackdrop') closeSheet('defaultProgramBackdrop'); });
+  $('#summaryDoneBtn').addEventListener('click', () => closeSheet('summaryBackdrop'));
+  $('#summaryBackdrop').addEventListener('click', e => { if(e.target.id === 'summaryBackdrop') closeSheet('summaryBackdrop'); });
 
   $('#saveFileBtn').addEventListener('click', exportData);
   $('#loadFileBtn').addEventListener('click', () => $('#fileInput').click());
