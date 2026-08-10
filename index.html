@@ -630,6 +630,7 @@ let swapContext = null;  // {dayKey, slotIndex}
 let timerInterval = null;
 let timerStart = null;
 let durationManuallySet = false;
+let staticDurationSeconds = null; // set while editing an already-saved session: its fixed, non-ticking duration
 let drafts = {};         // { [date]: { dayKey, sessionData, timerStart } } — unsaved in-progress workouts
 
 function saveDraft(){
@@ -689,6 +690,12 @@ function startWorkoutTimer(resumeFrom){
 function stopWorkoutTimer(){
   if(timerInterval) clearInterval(timerInterval);
   timerInterval = null;
+}
+function showStaticDuration(durationSeconds){
+  stopWorkoutTimer();
+  staticDurationSeconds = durationSeconds || 0;
+  timerStart = Date.now() - staticDurationSeconds * 1000;
+  updateTimerDisplay();
 }
 function updateTimerDisplay(){
   const elapsed = Math.floor((Date.now() - timerStart) / 1000);
@@ -844,7 +851,16 @@ function openLogView(dateStr, dayKey, existingSession){
   $('#logTitle').textContent = day.label;
   $('#logDate').textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' }) + ' ✎';
   renderExercises();
-  startWorkoutTimer(hasMatchingDraft ? draft.timerStart : null);
+  if(hasMatchingDraft){
+    staticDurationSeconds = null;
+    startWorkoutTimer(draft.timerStart);
+  }else if(existingSession){
+    // editing an already-saved workout: show its recorded duration statically, don't start a live timer
+    showStaticDuration(existingSession.durationSeconds);
+  }else{
+    staticDurationSeconds = null;
+    startWorkoutTimer(null);
+  }
   switchView('log');
 }
 
@@ -1136,12 +1152,11 @@ function finishSession(){
   const sessionVolume = computeSessionVolume(exercisesOut);
   const sessionPRs = computeSessionPRs(exercisesOut, editingSessionId);
 
-  const elapsedSeconds = timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0;
-  let durationSeconds = elapsedSeconds;
-  if(editingSessionId && !durationManuallySet){
-    const prior = state.sessions.find(s => s.id === editingSessionId);
-    durationSeconds = prior && prior.durationSeconds != null ? prior.durationSeconds : elapsedSeconds;
-  }
+  // editing an already-saved session keeps its fixed duration (or the manually-edited value);
+  // only a live/new/resumed-draft session derives duration from real elapsed wall-clock time
+  const durationSeconds = staticDurationSeconds != null
+    ? staticDurationSeconds
+    : (timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0);
 
   const sessionObj = {
     id: editingSessionId || Date.now().toString(),
@@ -1163,9 +1178,11 @@ function finishSession(){
   clearDraft(activeDate);
   stopWorkoutTimer();
   timerStart = null;
+  staticDurationSeconds = null;
   renderCalendar();
   renderHistory();
   renderPRs();
+  renderStats();
   switchView('calendar');
   openWorkoutSummary({ dayLabel: day.label, durationSeconds, volume: sessionVolume, prs: sessionPRs });
 }
@@ -1184,11 +1201,13 @@ function performExitWorkout(){
   saveToLocalStorage();
   stopWorkoutTimer();
   timerStart = null;
+  staticDurationSeconds = null;
 
   showToast('Workout discarded');
   renderCalendar();
   renderHistory();
   renderPRs();
+  renderStats();
   switchView('calendar');
 }
 
@@ -1220,7 +1239,7 @@ function renderHistory(){
     $('.h-del', item).addEventListener('click', () => {
       state.sessions = state.sessions.filter(s => s.id !== session.id);
       saveToLocalStorage();
-      renderHistory(); renderPRs(); renderCalendar();
+      renderHistory(); renderPRs(); renderCalendar(); renderStats();
     });
     container.appendChild(item);
   });
@@ -1362,7 +1381,9 @@ function renderDefaultProgram(highlightDayKey){
 
 function openEditDetailsSheet(){
   $('#editDateInput').value = activeDate;
-  const elapsedSeconds = timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0;
+  const elapsedSeconds = staticDurationSeconds != null
+    ? staticDurationSeconds
+    : (timerStart ? Math.floor((Date.now() - timerStart) / 1000) : 0);
   $('#editDurationInput').value = Math.round(elapsedSeconds / 60);
   openSheet('editDetailsBackdrop');
 }
@@ -1384,8 +1405,9 @@ function applyEditDetails(){
   }
 
   if(!isNaN(newDurationMin) && newDurationMin >= 0){
-    timerStart = Date.now() - (newDurationMin * 60000);
     durationManuallySet = true;
+    if(staticDurationSeconds != null) staticDurationSeconds = newDurationMin * 60;
+    timerStart = Date.now() - (newDurationMin * 60000);
     updateTimerDisplay();
   }
 
