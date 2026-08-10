@@ -40,6 +40,7 @@ test.describe('PR (personal record) tracking', () => {
     await expect(firstRow.locator('.check')).toHaveCSS('background-color', 'rgb(111, 157, 122)'); // --good (green = PR)
 
     await page.locator('#finishBtn').click();
+    await page.locator('#summaryDoneBtn').click();
     await page.locator('.tab-btn[data-tab="prs"]').click();
     await expect(page.locator('.pr-item', { hasText: 'Barbell Bench Press' }).locator('.pr-weight')).toContainText('145');
   });

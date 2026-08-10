@@ -24,7 +24,8 @@ test.describe('logging a workout', () => {
     await expect(page.locator('#progressLabel')).not.toHaveText('0%');
 
     await page.locator('#finishBtn').click();
-    await expect(page.locator('#toast')).toHaveText('Workout saved');
+    await expect(page.locator('#summaryBackdrop')).toBeVisible();
+    await page.locator('#summaryDoneBtn').click();
     await expect(page.locator('#view-calendar')).toHaveClass(/active/);
     await expect(page.locator('.cal-cell.today')).toHaveClass(/logged/);
 
