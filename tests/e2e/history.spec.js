@@ -72,4 +72,30 @@ test.describe('history: edit and delete', () => {
     await expect(items.nth(0).locator('.h-day')).toHaveText('Upper A');
     await expect(items.nth(1).locator('.h-day')).toHaveText('Lower A');
   });
+
+  test('the card shows the workout duration alongside its date', async ({ page }) => {
+    await seedLocalStorage(page, emptyData({
+      sessions: [makeSession({
+        date: todayLocal(), dayKey: 'upperA', dayLabel: 'Upper A', durationSeconds: 3625, // 1h 0m
+        exercises: [{ name: 'Barbell Bench Press', sets: [{ weight: 135, reps: 8 }] }],
+      })],
+    }));
+    await page.goto('/');
+    await page.locator('.tab-btn[data-tab="history"]').click();
+
+    await expect(page.locator('.history-item').first().locator('.h-date')).toContainText('1h 0m');
+  });
+
+  test('older sessions with no tracked duration show no duration on the card', async ({ page }) => {
+    await seedLocalStorage(page, emptyData({
+      sessions: [makeSession({
+        date: todayLocal(), dayKey: 'upperA', dayLabel: 'Upper A', durationSeconds: 0,
+        exercises: [{ name: 'Barbell Bench Press', sets: [{ weight: 135, reps: 8 }] }],
+      })],
+    }));
+    await page.goto('/');
+    await page.locator('.tab-btn[data-tab="history"]').click();
+
+    await expect(page.locator('.history-item').first().locator('.h-date .mono')).toHaveCount(0);
+  });
 });
