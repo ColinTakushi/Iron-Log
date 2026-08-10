@@ -37,6 +37,7 @@ test.describe('PR (personal record) tracking', () => {
     await firstRow.locator('input[data-field="reps"]').fill('6');
     await firstRow.locator('.check').click();
     await expect(firstRow).toHaveClass(/is-pr/);
+    await expect(firstRow.locator('.check')).toHaveCSS('background-color', 'rgb(111, 157, 122)'); // --good (green = PR)
 
     await page.locator('#finishBtn').click();
     await page.locator('#summaryDoneBtn').click();
