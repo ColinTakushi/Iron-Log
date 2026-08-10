@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A single-file, zero-dependency workout tracker built for a specific 4-day upper/lower hypertrophy program. It's a personal tool, hosted as a static site via GitHub Pages, used daily on an iPhone (added to the Home Screen as a pseudo-app).
 
-There is exactly one file that matters: `index.html`. Everything — HTML, CSS, and JS — lives in that single file. There is no build step, no bundler, no framework, no `package.json`. This is intentional; keep it that way unless the user explicitly asks to restructure.
+There is exactly one file that matters: `index.html`. Everything — HTML, CSS, and JS — lives in that single file. There is no build step, no bundler, no framework, and the shipped app has zero runtime dependencies. This is intentional; keep it that way unless the user explicitly asks to restructure.
+
+The repo does have a `package.json`, but it exists solely to run the Playwright test suite in CI (see "Testing" below) — it is dev-only tooling, never loaded by `index.html`, and doesn't compromise the zero-dependency nature of the shipped app.
 
 ## Running the app
 
@@ -19,6 +21,28 @@ xdg-open index.html      # Linux
 ```
 
 For mobile PWA testing, host it via GitHub Pages (Settings → Pages, source: `main`, root) and use "Add to Home Screen" on the device.
+
+## Testing
+
+A Playwright test suite runs against a real (headless) browser on every pull request via GitHub Actions (`.github/workflows/tests.yml`, both Chromium and WebKit — WebKit specifically because this app targets iOS Safari). There's no way to unit-test `index.html`'s script in isolation: it's a single non-module `<script>` tag that calls `init()` unconditionally at parse time, immediately touching real DOM and `localStorage`, so tests drive the actual rendered page rather than importing functions.
+
+Run locally:
+```bash
+npm install
+npx playwright install    # first time only, downloads browser binaries
+npm test                  # or: npx playwright test
+npx playwright show-report  # view the HTML report after a run
+```
+
+Structure:
+- `tests/support/` — a zero-dependency static file server (`static-server.js`, needed because `localStorage` requires a real `http://` origin, not `file://`) and `fixtures.js` (helpers to seed `localStorage['ironlog:data']` before navigation and build local-timezone date strings matching the app's own `fmtDate()`)
+- `tests/unit/` — calls the app's pure calculation functions (`getPR`, `computeWeekStreak`, `computeTotalVolume`, etc.) directly via `page.evaluate`, with controlled state fixtures, without going through the UI
+- `tests/e2e/` — one file per user-facing flow (calendar, logging, swap, history, PRs, stats, drafts, edit-details, exit-confirm, data import/export, tab navigation, mobile layout), driving the real UI end-to-end
+
+**Rules for future changes:**
+- When adding a new feature to `index.html`, add or extend a test covering it in the same change. Don't ship untested behavior.
+- Never delete or skip a test just because it's failing. A failing test means something regressed — fix the regression, don't remove the evidence of it.
+- Only remove or rewrite a test when the behavior it checks was intentionally changed (update the test to match the new correct behavior) or the feature it covers was intentionally removed from the app entirely (delete the test, and say why in the commit message).
 
 ## Tech constraints (important)
 
@@ -99,5 +123,5 @@ Sheets (bottom drawers) are toggled via `openSheet(id)` / `closeSheet(id)` which
 ## When making changes
 
 - Keep everything in `index.html`. If a change is substantial, mirror the existing code organization (state → helpers → render functions → event wiring in `init()`), which is laid out roughly in that order with `// ============ Section ============` comments.
-- After editing, there's no build/test step — just verify the HTML is well-formed and open it in a browser to sanity-check.
+- There's still no build step for the app itself — just verify the HTML is well-formed and open it in a browser to sanity-check. But there is a test step now: add/update Playwright tests for whatever you changed (see "Testing" above) and run `npm test` before considering the change done.
 - The user deploys by pushing `index.html` to this repo's root; GitHub Pages picks it up automatically.
