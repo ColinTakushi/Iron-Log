@@ -171,6 +171,15 @@
   }
   .log-header .lh-title{ font-family:'Oswald'; font-size:18px; text-transform:uppercase; letter-spacing:0.02em; }
   .log-header .lh-date{ font-size:11px; color: var(--iron); margin-top:1px; cursor:pointer; text-decoration: underline dotted; }
+  .plan-icon{
+    width:30px; height:30px; border-radius:9px; background: var(--bg-card); border:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:center; font-size:14px; color: var(--chalk-mute); cursor:pointer; flex-shrink:0;
+  }
+  .plan-day-block.plan-current{ background: var(--bg-card); border:1px solid var(--iron); border-radius:12px; padding:12px 12px 4px; margin-left:-4px; margin-right:-4px; }
+  .plan-current-badge{
+    font-family:'Oswald'; font-size:9px; text-transform:uppercase; letter-spacing:0.05em; color: var(--iron);
+    border:1px solid var(--iron); border-radius:8px; padding:2px 7px; margin-left:8px; vertical-align:middle;
+  }
 
   .session-meta{ display:flex; justify-content:space-between; align-items:center; margin: 14px 4px 12px; }
   .session-meta .set-total{ font-size:12px; color: var(--chalk-mute); }
@@ -337,6 +346,7 @@
           <div class="lh-title" id="logTitle">Upper A</div>
           <div class="lh-date" id="logDate"></div>
         </div>
+        <div class="plan-icon" id="viewPlanBtn" title="View plan">&#128203;</div>
         <div class="lh-timer" id="logTimer">0:00</div>
       </div>
       <div class="progress-wrap">
@@ -1170,23 +1180,30 @@ function renderStats(){
 }
 
 // ============ Sheets ============
-function renderDefaultProgram(){
+function renderDefaultProgram(highlightDayKey){
   const container = $('#defaultProgramList');
   container.innerHTML = '';
   DAY_ORDER.forEach(dayKey => {
     const day = PROGRAM_DEFAULT[dayKey];
+    const isCurrent = dayKey === highlightDayKey;
     const block = document.createElement('div');
+    block.className = 'plan-day-block' + (isCurrent ? ' plan-current' : '');
+    block.id = `planBlock-${dayKey}`;
     block.style.marginBottom = '18px';
     let rows = '';
     day.exercises.forEach(ex => {
       rows += `<div class="h-ex"><span>${ex.name}</span><span class="h-sets">${ex.target}</span></div>`;
     });
     block.innerHTML = `
-      <div class="h-day display" style="margin-bottom:8px;">${day.label}</div>
+      <div class="h-day display" style="margin-bottom:8px;">${day.label}${isCurrent ? '<span class="plan-current-badge">Today</span>' : ''}</div>
       ${rows}
     `;
     container.appendChild(block);
   });
+  if(highlightDayKey){
+    const target = $(`#planBlock-${highlightDayKey}`);
+    if(target) target.scrollIntoView({ block: 'start' });
+  }
 }
 
 function openEditDetailsSheet(){
@@ -1312,6 +1329,7 @@ function init(){
   $('#swapBackdrop').addEventListener('click', e => { if(e.target.id === 'swapBackdrop') closeSheet('swapBackdrop'); });
   $('#confirmBackdrop').addEventListener('click', e => { if(e.target.id === 'confirmBackdrop') closeSheet('confirmBackdrop'); });
   $('#viewDefaultBtn').addEventListener('click', () => { renderDefaultProgram(); openSheet('defaultProgramBackdrop'); });
+  $('#viewPlanBtn').addEventListener('click', () => { renderDefaultProgram(activeDayKey); openSheet('defaultProgramBackdrop'); });
   $('#logDate').addEventListener('click', openEditDetailsSheet);
   $('#logTimer').addEventListener('click', openEditDetailsSheet);
   $('#editDetailsApplyBtn').addEventListener('click', applyEditDetails);
