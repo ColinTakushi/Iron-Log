@@ -239,6 +239,28 @@
   .btn-secondary{ background: transparent; color: var(--chalk-mute); border:1px solid var(--hairline) !important; }
   .btn-danger-outline{ background: transparent; color: var(--danger); border:1px solid var(--danger) !important; }
 
+  /* ---------- Ongoing session tracker ---------- */
+  .session-tracker{
+    display:none; align-items:center; justify-content:space-between; gap:10px; cursor:pointer;
+    position: fixed; left:0; right:0; bottom:0; z-index: 25;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--hairline);
+  }
+  .session-tracker.show{ display:flex; }
+  .session-tracker .st-left{ display:flex; align-items:center; gap:10px; min-width:0; }
+  .session-tracker .st-dot{
+    width:9px; height:9px; border-radius:50%; background: var(--iron); flex-shrink:0;
+    box-shadow: 0 0 8px rgba(91,124,153,0.7); animation: st-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes st-pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.35; } }
+  .session-tracker .st-label{ font-family:'Oswald'; font-size:14px; text-transform:uppercase; letter-spacing:0.02em; }
+  .session-tracker .st-sub{ font-size:11px; color: var(--chalk-mute); margin-top:1px; }
+  .session-tracker .st-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .session-tracker .st-time{ font-size:16px; font-weight:600; color: var(--brass-bright); }
+  .session-tracker .st-arrow{ color: var(--chalk-dim); font-size:16px; }
+  body.has-session-tracker{ padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+
   /* ---------- History ---------- */
   .history-item{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:12px; padding: 14px 16px; margin-bottom: 10px; }
   .history-item .h-top{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
@@ -387,6 +409,21 @@
   </div>
 
 </main>
+
+<!-- Ongoing session tracker -->
+<div class="session-tracker" id="sessionTracker">
+  <div class="st-left">
+    <span class="st-dot"></span>
+    <div>
+      <div class="st-label" id="sessionTrackerLabel">Upper A</div>
+      <div class="st-sub">Workout in progress</div>
+    </div>
+  </div>
+  <div class="st-right">
+    <span class="st-time mono" id="sessionTrackerTime">0:00</span>
+    <span class="st-arrow">&rsaquo;</span>
+  </div>
+</div>
 
 <!-- Workout picker sheet -->
 <div class="sheet-backdrop" id="pickerBackdrop">
@@ -565,6 +602,41 @@ function saveDraft(){
 }
 function clearDraft(dateStr){
   delete drafts[dateStr];
+}
+
+function getActiveDraftEntry(){
+  const entries = Object.entries(drafts);
+  if(!entries.length) return null;
+  entries.sort((a, b) => (b[1].timerStart || 0) - (a[1].timerStart || 0));
+  const [date, draft] = entries[0];
+  return { date, ...draft };
+}
+
+let sessionTrackerInterval = null;
+function updateSessionTracker(){
+  const bar = $('#sessionTracker');
+  const entry = getActiveDraftEntry();
+  const inLogView = $('#view-log').classList.contains('active');
+  if(!entry || inLogView){
+    bar.classList.remove('show');
+    document.body.classList.remove('has-session-tracker');
+    if(sessionTrackerInterval){ clearInterval(sessionTrackerInterval); sessionTrackerInterval = null; }
+    return;
+  }
+  const day = getEffectiveDay(entry.dayKey);
+  $('#sessionTrackerLabel').textContent = day.label;
+  bar.dataset.date = entry.date;
+  const renderTime = () => {
+    const elapsed = Math.floor((Date.now() - entry.timerStart) / 1000);
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    $('#sessionTrackerTime').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  };
+  renderTime();
+  if(sessionTrackerInterval) clearInterval(sessionTrackerInterval);
+  sessionTrackerInterval = setInterval(renderTime, 1000);
+  bar.classList.add('show');
+  document.body.classList.add('has-session-tracker');
 }
 
 function startWorkoutTimer(resumeFrom){
@@ -1234,6 +1306,7 @@ function switchView(name){
   const tabbar = $('.tabbar');
   tabbar.style.display = name === 'log' ? 'none' : 'flex';
   $('#topHeader').style.display = name === 'log' ? 'none' : 'block';
+  updateSessionTracker();
 }
 function switchTab(tab){
   switchView(tab);
@@ -1297,6 +1370,7 @@ function init(){
   renderCalendar();
   renderHistory();
   renderPRs();
+  updateSessionTracker();
 
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
   $('#prevMonth').addEventListener('click', () => changeMonth(-1));
@@ -1319,6 +1393,11 @@ function init(){
   $('#editDetailsBackdrop').addEventListener('click', e => { if(e.target.id === 'editDetailsBackdrop') closeSheet('editDetailsBackdrop'); });
   $('#defaultProgramCloseBtn').addEventListener('click', () => closeSheet('defaultProgramBackdrop'));
   $('#defaultProgramBackdrop').addEventListener('click', e => { if(e.target.id === 'defaultProgramBackdrop') closeSheet('defaultProgramBackdrop'); });
+  $('#sessionTracker').addEventListener('click', () => {
+    const date = $('#sessionTracker').dataset.date;
+    const draft = drafts[date];
+    if(draft) openLogView(date, draft.dayKey, null);
+  });
 
   $('#saveFileBtn').addEventListener('click', exportData);
   $('#loadFileBtn').addEventListener('click', () => $('#fileInput').click());
