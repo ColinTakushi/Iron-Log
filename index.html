@@ -181,6 +181,9 @@
     font-family:'Oswald'; font-size:9px; text-transform:uppercase; letter-spacing:0.05em; color: var(--iron);
     border:1px solid var(--iron); border-radius:8px; padding:2px 7px; margin-left:8px; vertical-align:middle;
   }
+  .plan-ex{ font-size:13px; color: var(--chalk-dim); padding: 4px 0; }
+  .plan-ex .plan-ex-name{ color: var(--chalk); }
+  .plan-ex .plan-ex-target{ font-family:'Roboto Mono'; color: var(--chalk-mute); font-size:12px; }
 
   .session-meta{ display:flex; justify-content:space-between; align-items:center; margin: 14px 4px 12px; }
   .session-meta .set-total{ font-size:12px; color: var(--chalk-mute); }
@@ -1392,7 +1395,7 @@ function renderDefaultProgram(highlightDayKey){
     block.style.marginBottom = '18px';
     let rows = '';
     day.exercises.forEach(ex => {
-      rows += `<div class="h-ex"><span>${ex.name}</span><span class="h-sets">${ex.target}</span></div>`;
+      rows += `<div class="plan-ex"><span class="plan-ex-name">${ex.name}</span> <span class="plan-ex-target">${ex.target}</span></div>`;
     });
     block.innerHTML = `
       <div class="h-day display" style="margin-bottom:8px;">${day.label}${isCurrent ? '<span class="plan-current-badge">Today</span>' : ''}</div>
