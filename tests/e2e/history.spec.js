@@ -45,6 +45,10 @@ test.describe('history: edit and delete', () => {
     await expect(page.locator('.history-item')).toHaveCount(1);
 
     await page.locator('.h-del').click();
+    await expect(page.locator('#deleteHistoryConfirmBackdrop')).toBeVisible();
+    await expect(page.locator('.history-item')).toHaveCount(1); // not deleted until confirmed
+    await page.locator('#deleteHistoryConfirmBtn').click();
+
     await expect(page.locator('.history-item')).toHaveCount(0);
     await expect(page.locator('#historyList .empty-state')).toBeVisible();
 
