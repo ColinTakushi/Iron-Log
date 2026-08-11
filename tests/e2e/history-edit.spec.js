@@ -106,6 +106,7 @@ test.describe('editing an already-saved session from history', () => {
 
     // delete the more recent (heavier) session, leaving only the 135x8 one
     await page.locator('.history-item').first().locator('.h-del').click();
+    await page.locator('#deleteHistoryConfirmBtn').click();
     await expect(page.locator('.history-item')).toHaveCount(1);
 
     await page.locator('.tab-btn[data-tab="prs"]').click();

@@ -512,6 +512,17 @@
   </div>
 </div>
 
+<!-- Delete history entry confirmation sheet -->
+<div class="sheet-backdrop" id="deleteHistoryConfirmBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Delete Workout?</h3>
+    <div class="sheet-sub">This will permanently delete this logged workout. This can't be undone.</div>
+    <button class="data-btn" style="background:var(--danger); color:#fff;" id="deleteHistoryConfirmBtn">Delete</button>
+    <button class="sheet-close-btn" id="deleteHistoryCancelBtn">Cancel</button>
+  </div>
+</div>
+
 <!-- Edit date/duration sheet -->
 <div class="sheet-backdrop" id="editDetailsBackdrop">
   <div class="sheet">
@@ -1236,13 +1247,28 @@ function renderHistory(){
       <div class="h-actions"><span class="h-link h-edit">Edit</span><span class="h-link h-del">Delete</span></div>
     `;
     $('.h-edit', item).addEventListener('click', () => openLogView(session.date, session.dayKey, session));
-    $('.h-del', item).addEventListener('click', () => {
-      state.sessions = state.sessions.filter(s => s.id !== session.id);
-      saveToLocalStorage();
-      renderHistory(); renderPRs(); renderCalendar(); renderStats();
-    });
+    $('.h-del', item).addEventListener('click', () => requestDeleteSession(session.id));
     container.appendChild(item);
   });
+}
+
+let pendingDeleteSessionId = null;
+function requestDeleteSession(sessionId){
+  pendingDeleteSessionId = sessionId;
+  openSheet('deleteHistoryConfirmBackdrop');
+}
+function cancelDeleteSession(){
+  pendingDeleteSessionId = null;
+  closeSheet('deleteHistoryConfirmBackdrop');
+}
+function performDeleteSession(){
+  if(!pendingDeleteSessionId){ closeSheet('deleteHistoryConfirmBackdrop'); return; }
+  state.sessions = state.sessions.filter(s => s.id !== pendingDeleteSessionId);
+  pendingDeleteSessionId = null;
+  saveToLocalStorage();
+  closeSheet('deleteHistoryConfirmBackdrop');
+  renderHistory(); renderPRs(); renderCalendar(); renderStats();
+  showToast('Workout deleted');
 }
 
 // ============ PRs ============
@@ -1503,6 +1529,9 @@ function init(){
   $('#swapCancel').addEventListener('click', () => closeSheet('swapBackdrop'));
   $('#confirmExitBtn').addEventListener('click', performExitWorkout);
   $('#confirmCancelBtn').addEventListener('click', () => closeSheet('confirmBackdrop'));
+  $('#deleteHistoryConfirmBtn').addEventListener('click', performDeleteSession);
+  $('#deleteHistoryCancelBtn').addEventListener('click', cancelDeleteSession);
+  $('#deleteHistoryConfirmBackdrop').addEventListener('click', e => { if(e.target.id === 'deleteHistoryConfirmBackdrop') cancelDeleteSession(); });
   $('#pickerBackdrop').addEventListener('click', e => { if(e.target.id === 'pickerBackdrop') closeSheet('pickerBackdrop'); });
   $('#swapBackdrop').addEventListener('click', e => { if(e.target.id === 'swapBackdrop') closeSheet('swapBackdrop'); });
   $('#confirmBackdrop').addEventListener('click', e => { if(e.target.id === 'confirmBackdrop') closeSheet('confirmBackdrop'); });
