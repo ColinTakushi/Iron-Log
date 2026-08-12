@@ -295,6 +295,7 @@
   .pr-item{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:12px; padding: 14px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
   .pr-item .pr-name{ font-size:14px; font-weight:600; }
   .pr-item .pr-sub{ font-size:11px; color:var(--chalk-mute); margin-top:2px; }
+  .pr-item .pr-erm{ font-family:'Roboto Mono'; font-size:11px; color:var(--iron); margin-top:2px; }
   .pr-item .pr-weight{ font-family:'Roboto Mono'; font-size:20px; font-weight:700; color: var(--brass-bright); text-align:right; }
   .pr-item .pr-weight span{ font-size:11px; color:var(--chalk-mute); display:block; font-weight:400; margin-top:1px; }
 
@@ -1092,6 +1093,11 @@ function getPR(exerciseName, excludeSessionId){
   return best;
 }
 
+function computeERM(weight, reps){
+  if(weight == null || weight === '') return null;
+  return Math.round(weight * (1 + (reps || 0) / 30));
+}
+
 function formatPrevText(prev){
   if(!prev) return 'no data yet';
   const parts = prev.sets.filter(s => s.weight != null && s.weight !== '').map(s => `${s.weight}x${s.reps ?? '-'}`);
@@ -1292,8 +1298,9 @@ function renderPRs(){
     item.className = 'pr-item';
     const d = new Date(pr.date + 'T00:00:00');
     const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    const erm = computeERM(pr.weight, pr.reps);
     item.innerHTML = `
-      <div><div class="pr-name">${name}</div><div class="pr-sub">${dateStr}</div></div>
+      <div><div class="pr-name">${name}</div><div class="pr-sub">${dateStr}</div><div class="pr-erm">Est. 1RM ${erm}</div></div>
       <div class="pr-weight">${pr.weight}<span>x${pr.reps ?? '-'} reps</span></div>
     `;
     container.appendChild(item);
