@@ -45,6 +45,14 @@ test.describe('pure calculation functions', () => {
     expect(pr).toBeNull();
   });
 
+  test('computeERM estimates 1RM from weight and reps, rounded to the nearest whole number', async ({ page }) => {
+    expect(await page.evaluate(() => computeERM(185, 10))).toBe(247); // 185 * (1 + 10/30) = 246.67
+    expect(await page.evaluate(() => computeERM(135, 8))).toBe(171); // 135 * (1 + 8/30) = 171.0
+    expect(await page.evaluate(() => computeERM(100, 0))).toBe(100);
+    expect(await page.evaluate(() => computeERM('', 8))).toBeNull();
+    expect(await page.evaluate(() => computeERM(null, 8))).toBeNull();
+  });
+
   test('formatPrevText formats logged sets or reports no data', async ({ page }) => {
     const withData = await page.evaluate(() =>
       formatPrevText({ date: '2024-01-01', sets: [{ weight: 100, reps: 10 }, { weight: 105, reps: 8 }] })

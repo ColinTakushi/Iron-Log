@@ -16,6 +16,8 @@ test.describe('PR (personal record) tracking', () => {
     const item = page.locator('.pr-item', { hasText: 'Back Squat' });
     await expect(item.locator('.pr-weight')).toContainText('185');
     await expect(item.locator('.pr-weight span')).toHaveText('x10 reps');
+    // ERM = 185 * (1 + 10/30) = 246.67, rounded to 247
+    await expect(item.locator('.pr-erm')).toHaveText('Est. 1RM 247');
   });
 
   test('logging a new heavier set highlights it live and updates the PR tab after saving', async ({ page }) => {
