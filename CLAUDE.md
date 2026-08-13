@@ -94,7 +94,7 @@ Sheets (bottom drawers) are toggled via `openSheet(id)` / `closeSheet(id)` which
 
 ### Key flows
 
-- **Tapping a calendar date** → `onDateTapped` → opens existing session, resumes draft, or shows the workout picker sheet
+- **Tapping a calendar date** → `onDateTapped` → opens existing session directly, prompts Resume/Start Over if a draft exists (`openResumePrompt`), or shows the workout picker sheet
 - **Workout picker** → `openLogView(dateStr, dayKey, existingSession)` → populates `sessionData` from draft/existing/blank, starts timer, renders exercises
 - **Set check/uncheck** → updates `sessionData` in place, calls `updateSetCounter()` for progress bar, applies `.is-pr` class immediately if weight ≥ current PR
 - **Add/remove set** → also persists the new set count into `state.customProgram` so it survives refresh
@@ -108,6 +108,7 @@ Sheets (bottom drawers) are toggled via `openSheet(id)` / `closeSheet(id)` which
 
 ## Key behaviors already implemented (don't regress these)
 
+- **Calendar-first navigation**: tapping a date opens a saved session directly for editing if one exists; if an unsaved draft exists instead, it shows a prompt sheet (`#resumeBackdrop`) letting the user choose "Resume Where I Left Off" or "Start Over" (which discards the draft and reopens the workout picker) — it does **not** auto-resume silently. If neither exists, it opens the workout picker (highlighting the next day in rotation).
 - Drafts persist across navigation: leaving the log view via the back arrow saves an in-memory + localStorage draft (sets, weights, timer start) so nothing is lost. The timer keeps counting real elapsed time even while away — it's wall-clock based (`timerStart` timestamp), not a pausable stopwatch.
 - Exit button: destructive — discards the current session's data (deletes it from `state.sessions` if editing a saved one, or clears the draft if new) and requires confirmation via the in-app sheet (`#confirmBackdrop`). Do not use `window.confirm()`/`alert()`/`prompt()` anywhere in this app — they were found to be unreliable in sandboxed/embedded contexts; all confirmations use the custom bottom-sheet pattern instead.
 - Stats tab: total time trained (sum of `durationSeconds`), week streak (consecutive Sun–Sat weeks with ≥1 session, current week doesn't break the streak if not yet trained), total volume (Σ weight × reps across every set ever logged).

@@ -49,7 +49,7 @@ test.describe('calendar view', () => {
     await expect(page.locator('#logTitle')).toHaveText('Lower B');
   });
 
-  test('a draft for today shows .in-progress and resumes directly on tap (no picker)', async ({ page }) => {
+  test('a draft for today shows .in-progress and tapping it opens the resume prompt (not the picker, not a silent resume)', async ({ page }) => {
     const today = todayLocal();
     await seedLocalStorage(page, emptyData({
       drafts: { [today]: { dayKey: 'upperB', sessionData: {}, timerStart: Date.now() } },
@@ -62,6 +62,10 @@ test.describe('calendar view', () => {
 
     await todayCell.click();
     await expect(page.locator('#pickerBackdrop')).toBeHidden();
+    await expect(page.locator('#view-log')).not.toHaveClass(/active/);
+    await expect(page.locator('#resumeBackdrop')).toHaveClass(/show/);
+
+    await page.locator('#resumeConfirmBtn').click();
     await expect(page.locator('#view-log')).toHaveClass(/active/);
     await expect(page.locator('#logTitle')).toHaveText('Upper B');
   });
