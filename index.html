@@ -516,6 +516,18 @@
   </div>
 </div>
 
+<!-- Resume vs Start Over sheet -->
+<div class="sheet-backdrop" id="resumeBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Unfinished Workout</h3>
+    <div class="sheet-sub" id="resumeSub"></div>
+    <button class="data-btn" id="resumeConfirmBtn">Resume Where I Left Off</button>
+    <button class="data-btn secondary" id="resumeNewBtn" style="margin-top:10px;">Start Over</button>
+    <button class="sheet-close-btn" id="resumeCancelBtn">Cancel</button>
+  </div>
+</div>
+
 <!-- Delete history entry confirmation sheet -->
 <div class="sheet-backdrop" id="deleteHistoryConfirmBackdrop">
   <div class="sheet">
@@ -661,12 +673,34 @@ function clearDraft(dateStr){
   delete drafts[dateStr];
 }
 
+let draftSaveTimer = null;
+function saveDraftDebounced(){
+  clearTimeout(draftSaveTimer);
+  draftSaveTimer = setTimeout(() => { saveDraft(); }, 500);
+}
+
 function getActiveDraftEntry(){
   const entries = Object.entries(drafts);
   if(!entries.length) return null;
   entries.sort((a, b) => (b[1].timerStart || 0) - (a[1].timerStart || 0));
   const [date, draft] = entries[0];
   return { date, ...draft };
+}
+
+function cleanupStaleDrafts(){
+  const STALE_DAYS = 3;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - STALE_DAYS);
+  const cutoffStr = fmtDate(cutoff);
+
+  let changed = false;
+  Object.keys(drafts).forEach(dateStr => {
+    if(dateStr < cutoffStr){
+      delete drafts[dateStr];
+      changed = true;
+    }
+  });
+  if(changed) saveToLocalStorage();
 }
 
 let sessionTrackerInterval = null;
@@ -789,15 +823,26 @@ function getRecommendedDayKey(){
 }
 
 // ============ Date tap -> picker or edit ============
+let pendingResumeDate = null;
 function onDateTapped(dateStr){
   const existing = findSessionByDate(dateStr);
   if(existing){
     openLogView(dateStr, existing.dayKey, existing);
   }else if(drafts[dateStr]){
-    openLogView(dateStr, drafts[dateStr].dayKey, null);
+    openResumePrompt(dateStr);
   }else{
     openPickerSheet(dateStr);
   }
+}
+
+function openResumePrompt(dateStr){
+  pendingResumeDate = dateStr;
+  const draft = drafts[dateStr];
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayLabel = PROGRAM_DEFAULT[draft.dayKey].label;
+  const dateLabel = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+  $('#resumeSub').textContent = `You have an unfinished ${dayLabel} on ${dateLabel} — resume where you left off, or start over?`;
+  openSheet('resumeBackdrop');
 }
 
 function openPickerSheet(dateStr){
@@ -931,9 +976,11 @@ function renderExercises(){
 
       $('input[data-field="weight"]', row).addEventListener('input', e => {
         sessionData[slotIdx][idx].weight = e.target.value === '' ? '' : parseFloat(e.target.value);
+        saveDraftDebounced();
       });
       $('input[data-field="reps"]', row).addEventListener('input', e => {
         sessionData[slotIdx][idx].reps = e.target.value === '' ? '' : parseInt(e.target.value);
+        saveDraftDebounced();
       });
       const checkBtn = $('.check', row);
       checkBtn.addEventListener('click', () => {
@@ -943,6 +990,7 @@ function renderExercises(){
         checkBtn.textContent = s.done ? '✓' : '';
         row.classList.toggle('is-pr', s.done && s.weight && pr && s.weight >= pr.weight);
         updateSetCounter();
+        saveDraft();
       });
       rows.appendChild(row);
     });
@@ -1525,6 +1573,7 @@ function init(){
   viewMonth = now.getMonth();
 
   loadFromLocalStorage();
+  cleanupStaleDrafts();
   renderCalendar();
   renderHistory();
   renderPRs();
@@ -1563,11 +1612,31 @@ function init(){
   $('#summaryDoneBtn').addEventListener('click', () => closeSheet('summaryBackdrop'));
   $('#summaryBackdrop').addEventListener('click', e => { if(e.target.id === 'summaryBackdrop') closeSheet('summaryBackdrop'); });
 
+  $('#resumeConfirmBtn').addEventListener('click', () => {
+    closeSheet('resumeBackdrop');
+    openLogView(pendingResumeDate, drafts[pendingResumeDate].dayKey, null);
+  });
+  $('#resumeNewBtn').addEventListener('click', () => {
+    closeSheet('resumeBackdrop');
+    clearDraft(pendingResumeDate);
+    saveToLocalStorage();
+    renderCalendar();
+    openPickerSheet(pendingResumeDate);
+  });
+  $('#resumeCancelBtn').addEventListener('click', () => closeSheet('resumeBackdrop'));
+  $('#resumeBackdrop').addEventListener('click', e => { if(e.target.id === 'resumeBackdrop') closeSheet('resumeBackdrop'); });
+
   $('#saveFileBtn').addEventListener('click', exportData);
   $('#loadFileBtn').addEventListener('click', () => $('#fileInput').click());
   $('#fileInput').addEventListener('change', e => {
     if(e.target.files && e.target.files[0]) importData(e.target.files[0]);
   });
+
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'hidden') saveDraft();
+  });
+  window.addEventListener('pagehide', () => saveDraft());
+  window.addEventListener('beforeunload', () => saveDraft());
 }
 
 init();

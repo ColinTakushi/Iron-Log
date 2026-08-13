@@ -37,7 +37,7 @@ npx playwright show-report  # view the HTML report after a run
 Structure:
 - `tests/support/` — a zero-dependency static file server (`static-server.js`, needed because `localStorage` requires a real `http://` origin, not `file://`) and `fixtures.js` (helpers to seed `localStorage['ironlog:data']` before navigation and build local-timezone date strings matching the app's own `fmtDate()`)
 - `tests/unit/` — calls the app's pure calculation functions (`getPR`, `computeWeekStreak`, `computeTotalVolume`, etc.) directly via `page.evaluate`, with controlled state fixtures, without going through the UI
-- `tests/e2e/` — one file per user-facing flow (calendar, logging, swap, history, PRs, stats, drafts, edit-details, exit-confirm, data import/export, tab navigation, mobile layout), driving the real UI end-to-end
+- `tests/e2e/` — one file per user-facing flow (calendar, logging, swap, history, PRs, stats, drafts, resume-prompt, stale-drafts, edit-details, exit-confirm, data import/export, tab navigation, mobile layout), driving the real UI end-to-end
 
 **Rules for future changes:**
 - When adding a new feature to `index.html`, add or extend a test covering it in the same change. Don't ship untested behavior.
@@ -62,7 +62,7 @@ The entire app is a single file: `index.html`. It contains three sections in ord
 
 1. **`<style>`** — all CSS, using CSS custom properties defined on `:root` for the color palette (`--bg`, `--brass`, `--iron`, `--chalk`, etc.)
 2. **`<body>`** — static HTML shell: header, tab bar, five view divs (`#view-calendar`, `#view-log`, `#view-history`, `#view-prs`, `#view-stats`, `#view-data`), and several sheet/modal overlays
-3. **`<script>`** — all application logic (~870 lines of vanilla JS, no imports)
+3. **`<script>`** — all application logic (~1080 lines of vanilla JS, no imports)
 
 ### Data layer
 
@@ -94,13 +94,13 @@ Sheets (bottom drawers) are toggled via `openSheet(id)` / `closeSheet(id)` which
 
 ### Key flows
 
-- **Tapping a calendar date** → `onDateTapped` → opens existing session, resumes draft, or shows the workout picker sheet
+- **Tapping a calendar date** → `onDateTapped` → opens existing session directly, prompts Resume/Start Over if a draft exists (`openResumePrompt`), or shows the workout picker sheet
 - **Workout picker** → `openLogView(dateStr, dayKey, existingSession)` → populates `sessionData` from draft/existing/blank, starts timer, renders exercises
 - **Set check/uncheck** → updates `sessionData` in place, calls `updateSetCounter()` for progress bar, applies `.is-pr` class immediately if weight ≥ current PR
 - **Add/remove set** → also persists the new set count into `state.customProgram` so it survives refresh
 - **Swap exercise** → writes into `state.customProgram[dayKey][slotIdx]`, resets that slot's `sessionData`, re-renders
 - **Finish** → `finishSession()` assembles the session object, upserts into `state.sessions`, clears draft, saves, re-renders calendar/history/PRs
-- **Back arrow** → saves draft before leaving log view
+- **Back arrow** → saves draft before leaving log view (one of several draft save points — see "Drafts persist" below)
 
 ### PR detection
 
@@ -108,7 +108,9 @@ Sheets (bottom drawers) are toggled via `openSheet(id)` / `closeSheet(id)` which
 
 ## Key behaviors already implemented (don't regress these)
 
-- Drafts persist across navigation: leaving the log view via the back arrow saves an in-memory + localStorage draft (sets, weights, timer start) so nothing is lost. The timer keeps counting real elapsed time even while away — it's wall-clock based (`timerStart` timestamp), not a pausable stopwatch.
+- **Calendar-first navigation**: tapping a date opens a saved session directly for editing if one exists; if an unsaved draft exists instead, it shows a prompt sheet (`#resumeBackdrop`) letting the user choose "Resume Where I Left Off" or "Start Over" (which discards the draft and reopens the workout picker) — it does **not** auto-resume silently. If neither exists, it opens the workout picker (highlighting the next day in rotation).
+- Drafts persist across navigation, and save aggressively enough to survive iOS silently killing the app mid-workout (a real risk since this runs as a Home Screen WKWebView, not a native app): `saveDraft()` fires immediately on checkbox toggle, debounced (~500ms via `saveDraftDebounced()`) on weight/reps input, on the back arrow, and on `visibilitychange`/`pagehide`/`beforeunload` (registered once in `init()`). `saveDraft()` itself no-ops when there's no `activeDate` or when editing a saved session, so these lifecycle listeners are safe to call unconditionally from anywhere in the app. The timer keeps counting real elapsed time even while away — it's wall-clock based (`timerStart` timestamp), not a pausable stopwatch.
+- Stale draft cleanup: `cleanupStaleDrafts()` runs once in `init()` (right after `loadFromLocalStorage()`, before the first render) and discards any draft dated more than 3 days before today, so an abandoned workout doesn't permanently occupy a calendar date or keep offering to "resume" a session from weeks ago. `state.sessions` is never touched by this sweep — only `drafts`.
 - Exit button: destructive — discards the current session's data (deletes it from `state.sessions` if editing a saved one, or clears the draft if new) and requires confirmation via the in-app sheet (`#confirmBackdrop`). Do not use `window.confirm()`/`alert()`/`prompt()` anywhere in this app — they were found to be unreliable in sandboxed/embedded contexts; all confirmations use the custom bottom-sheet pattern instead.
 - Stats tab: total time trained (sum of `durationSeconds`), week streak (consecutive Sun–Sat weeks with ≥1 session, current week doesn't break the streak if not yet trained), total volume (Σ weight × reps across every set ever logged).
 - Editable date/duration: tapping the date or timer in the log view header opens a sheet to change either. Changing date blocks if the target date already has a session (one session per date). Editing duration re-bases `timerStart` rather than storing a separate override value.
