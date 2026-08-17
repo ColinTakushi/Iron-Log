@@ -292,6 +292,12 @@
   .empty-state p{ font-size:13px; line-height:1.6; max-width:280px; margin: 0 auto; }
 
   /* ---------- PRs ---------- */
+  .pr-search-input{
+    width:100%; background: var(--bg-card); border:1px solid var(--hairline); color: var(--chalk);
+    border-radius:12px; padding: 12px 14px; font-size:14px; margin-bottom:14px;
+  }
+  .pr-search-input::placeholder{ color: var(--chalk-mute); }
+  .pr-search-input:focus{ outline:none; border-color: var(--iron); }
   .pr-item{ background: var(--bg-card); border:1px solid var(--hairline); border-radius:12px; padding: 14px 16px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
   .pr-item .pr-name{ font-size:14px; font-weight:600; }
   .pr-item .pr-sub{ font-size:11px; color:var(--chalk-mute); margin-top:2px; }
@@ -404,7 +410,10 @@
   <div class="view" id="view-history"><div id="historyList"></div></div>
 
   <!-- PR VIEW -->
-  <div class="view" id="view-prs"><div id="prList"></div></div>
+  <div class="view" id="view-prs">
+    <input type="text" id="prSearchInput" class="pr-search-input" placeholder="Search exercises..." autocomplete="off">
+    <div id="prList"></div>
+  </div>
 
   <!-- STATS VIEW -->
   <div class="view" id="view-stats"><div id="statsList"></div></div>
@@ -1330,15 +1339,29 @@ function performDeleteSession(){
 }
 
 // ============ PRs ============
+function fuzzyMatch(query, text){
+  if(!query) return true;
+  query = query.toLowerCase();
+  text = text.toLowerCase();
+  if(text.includes(query)) return true;
+  let qi = 0;
+  for(let i = 0; i < text.length && qi < query.length; i++){
+    if(text[i] === query[qi]) qi++;
+  }
+  return qi === query.length;
+}
 function renderPRs(){
   const container = $('#prList');
   container.innerHTML = '';
+  const query = $('#prSearchInput').value.trim();
   const names = new Set();
   Object.keys(PROGRAM_DEFAULT).forEach(dayKey => getEffectiveDay(dayKey).exercises.forEach(ex => names.add(ex.name)));
   state.sessions.forEach(s => s.exercises.forEach(ex => names.add(ex.name)));
 
+  const sortedNames = [...names].sort((a, b) => a.localeCompare(b));
   let any = false;
-  [...names].forEach(name => {
+  sortedNames.forEach(name => {
+    if(!fuzzyMatch(query, name)) return;
     const pr = getPR(name);
     if(!pr) return;
     any = true;
@@ -1353,7 +1376,10 @@ function renderPRs(){
     `;
     container.appendChild(item);
   });
-  if(!any) container.innerHTML = `<div class="empty-state"><div class="mark-big"></div><p>No PRs recorded yet. Your heaviest logged set for each lift will show up here.</p></div>`;
+  if(!any){
+    const msg = query ? 'No exercises match your search.' : 'No PRs recorded yet. Your heaviest logged set for each lift will show up here.';
+    container.innerHTML = `<div class="empty-state"><div class="mark-big"></div><p>${msg}</p></div>`;
+  }
 }
 
 // ============ Stats ============
@@ -1580,6 +1606,7 @@ function init(){
   updateSessionTracker();
 
   $$('.tab-btn').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+  $('#prSearchInput').addEventListener('input', renderPRs);
   $('#prevMonth').addEventListener('click', () => changeMonth(-1));
   $('#nextMonth').addEventListener('click', () => changeMonth(1));
   $('#backToCalendar').addEventListener('click', () => { saveDraft(); stopWorkoutTimer(); switchView('calendar'); renderCalendar(); });
