@@ -70,6 +70,30 @@ test.describe('drafts (unsaved in-progress workouts)', () => {
     await expect(page.locator('.cal-cell.today')).not.toHaveClass(/in-progress/);
   });
 
+  test('finishing a session clears its draft from persisted storage, so reopening the app does not still think a workout is in progress', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('.cal-cell.today').click();
+    await page.locator('.workout-option', { hasText: 'Upper A' }).click();
+
+    const firstRow = page.locator('.exercise-card').first().locator('.set-row').first();
+    await firstRow.locator('input[data-field="weight"]').fill('135');
+    await firstRow.locator('.check').click();
+    await page.locator('#finishBtn').click();
+    await page.locator('#summaryDoneBtn').click();
+
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('ironlog:data')));
+    expect(Object.keys(saved.drafts)).toHaveLength(0);
+
+    await page.reload();
+    await expect(page.locator('.cal-cell.today')).toHaveClass(/logged/);
+    await expect(page.locator('.cal-cell.today')).not.toHaveClass(/in-progress/);
+    await expect(page.locator('#sessionTracker')).not.toHaveClass(/show/);
+
+    await page.locator('.cal-cell.today').click();
+    await expect(page.locator('#resumeBackdrop')).not.toHaveClass(/show/);
+    await expect(page.locator('#view-log')).toHaveClass(/active/);
+  });
+
   test('typing a weight persists to localStorage after a brief pause, without leaving the log view', async ({ page }) => {
     await page.goto('/');
     await page.locator('.cal-cell.today').click();
