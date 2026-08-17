@@ -54,4 +54,48 @@ test.describe('PR (personal record) tracking', () => {
     await expect(page.locator('#prList .empty-state')).toBeVisible();
     await expect(page.locator('.pr-item')).toHaveCount(0);
   });
+
+  test('PR list is sorted alphabetically regardless of logging order', async ({ page }) => {
+    await seedLocalStorage(page, emptyData({
+      sessions: [
+        makeSession({ date: daysFromToday(-3), dayKey: 'upperA', dayLabel: 'Upper A', exercises: [{ name: 'Zercher Squat', sets: [{ weight: 100, reps: 5 }] }] }),
+        makeSession({ date: daysFromToday(-2), dayKey: 'upperA', dayLabel: 'Upper A', exercises: [{ name: 'Arnold Press', sets: [{ weight: 40, reps: 10 }] }] }),
+        makeSession({ date: daysFromToday(-1), dayKey: 'upperA', dayLabel: 'Upper A', exercises: [{ name: 'Mid Row', sets: [{ weight: 80, reps: 8 }] }] }),
+      ],
+    }));
+    await page.goto('/');
+    await page.locator('.tab-btn[data-tab="prs"]').click();
+
+    await expect(page.locator('.pr-item .pr-name')).toHaveText(['Arnold Press', 'Mid Row', 'Zercher Squat']);
+  });
+
+  test('search filters the PR list with fuzzy matching', async ({ page }) => {
+    await seedLocalStorage(page, emptyData({
+      sessions: [
+        makeSession({ date: daysFromToday(-3), dayKey: 'upperA', dayLabel: 'Upper A', exercises: [{ name: 'Zercher Squat', sets: [{ weight: 100, reps: 5 }] }] }),
+        makeSession({ date: daysFromToday(-2), dayKey: 'upperA', dayLabel: 'Upper A', exercises: [{ name: 'Arnold Press', sets: [{ weight: 40, reps: 10 }] }] }),
+        makeSession({ date: daysFromToday(-1), dayKey: 'upperA', dayLabel: 'Upper A', exercises: [{ name: 'Mid Row', sets: [{ weight: 80, reps: 8 }] }] }),
+      ],
+    }));
+    await page.goto('/');
+    await page.locator('.tab-btn[data-tab="prs"]').click();
+    await expect(page.locator('.pr-item')).toHaveCount(3);
+
+    // Substring match, case-insensitive.
+    await page.locator('#prSearchInput').fill('row');
+    await expect(page.locator('.pr-item .pr-name')).toHaveText(['Mid Row']);
+
+    // Fuzzy (non-contiguous) subsequence match.
+    await page.locator('#prSearchInput').fill('arnld');
+    await expect(page.locator('.pr-item .pr-name')).toHaveText(['Arnold Press']);
+
+    // No match shows the empty state with a search-specific message.
+    await page.locator('#prSearchInput').fill('xyz123');
+    await expect(page.locator('.pr-item')).toHaveCount(0);
+    await expect(page.locator('#prList .empty-state')).toContainText('No exercises match your search.');
+
+    // Clearing the search restores the full, sorted list.
+    await page.locator('#prSearchInput').fill('');
+    await expect(page.locator('.pr-item .pr-name')).toHaveText(['Arnold Press', 'Mid Row', 'Zercher Squat']);
+  });
 });
