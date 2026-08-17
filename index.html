@@ -1242,11 +1242,15 @@ function finishSession(){
     state.sessions.push(sessionObj);
   }
 
-  saveToLocalStorage();
   clearDraft(activeDate);
+  saveToLocalStorage();
   stopWorkoutTimer();
   timerStart = null;
   staticDurationSeconds = null;
+  activeDate = null;
+  activeDayKey = null;
+  editingSessionId = null;
+  sessionData = {};
   renderCalendar();
   renderHistory();
   renderPRs();
@@ -1270,6 +1274,10 @@ function performExitWorkout(){
   stopWorkoutTimer();
   timerStart = null;
   staticDurationSeconds = null;
+  activeDate = null;
+  activeDayKey = null;
+  editingSessionId = null;
+  sessionData = {};
 
   showToast('Workout discarded');
   renderCalendar();
